@@ -1,0 +1,50 @@
+
+MMA7660FC
+	slave address = 0b01001100 = 0x4C
+
+	i2cSDA3_OUT		i2cSDA3		GPA1_2
+	i2cSCL3_OUT		i2cSCL3		GPA1_3
+
+	XEINT25		IRQID = 64		GPX3_1
+
+GPIO Configure
+	
+	GPA1CON		0x1140 0020
+		GPA1CON[2]	[11:8]	0x3		I2C_3_SDA
+		GPA1CON[3]	[15:12]	0x3		I2C_3_SCL
+
+	
+IRQ Configure
+	
+	XEINT25		IRQID = 64		GPX3_1
+	GPX3CON		0x1100 0C60
+		GPX3CON[1]	[7:4]	0xF	
+
+	EXT_INT43CON	0x1100 0E0C
+		EXT_INT43CON[1]	[6:4]	0x2		Triggers Falling edge
+	EXT_INT43_MASK	0x1100 0F0C
+		[1]		0x0
+	EXT_INT43_PEND	0x1100 0F4C
+		[1]		Read only
+		
+I2C Configure
+	I2CCON3		0x1389 0000
+		[7]		0x1		ACK Enables
+		[6]		0x1		Clock prescaler
+			I2CCLK = fPCLK / 512
+		[5]		0x1		Interrupt enable
+
+		[3:0]	0x1		Clock prescaler
+			Tx clock = I2CCLK / (I2CCON[3:0] + 1)
+
+	I2CSTAT3	0x1389 0004
+		[7:6]	Tx/Rx mode
+			10		Master receive mode
+			11		Master transmit mode
+
+		[5]		I2C-bus busy
+			0	Not busy
+			1	Busy
+
+
+

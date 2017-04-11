@@ -1,0 +1,57 @@
+
+main.o:     file format elf32-i386
+
+Disassembly of section .text:
+
+00000000 <func>:
+   0:	55                   	push   %ebp
+   1:	89 e5                	mov    %esp,%ebp
+   3:	5d                   	pop    %ebp
+   4:	c3                   	ret    
+
+00000005 <main>:
+   5:	8d 4c 24 04          	lea    0x4(%esp),%ecx
+   9:	83 e4 f0             	and    $0xfffffff0,%esp
+   c:	ff 71 fc             	pushl  0xfffffffc(%ecx)
+   f:	55                   	push   %ebp
+  10:	89 e5                	mov    %esp,%ebp
+  12:	51                   	push   %ecx
+  13:	83 ec 04             	sub    $0x4,%esp
+  16:	c7 04 24 00 00 00 00 	movl   $0x0,(%esp)
+  1d:	e8 fc ff ff ff       	call   1e <main+0x19>
+  22:	b8 00 00 00 00       	mov    $0x0,%eax
+  27:	83 c4 04             	add    $0x4,%esp
+  2a:	59                   	pop    %ecx
+  2b:	5d                   	pop    %ebp
+  2c:	8d 61 fc             	lea    0xfffffffc(%ecx),%esp
+  2f:	c3                   	ret    
+Disassembly of section .rodata:
+
+00000000 <.rodata>:
+   0:	68 65 6c 6c 6f       	push   $0x6f6c6c65
+   5:	20 77 6f             	and    %dh,0x6f(%edi)
+   8:	72 6c                	jb     76 <main+0x71>
+   a:	64                   	fs
+	...
+Disassembly of section .comment:
+
+00000000 <.comment>:
+   0:	00 47 43             	add    %al,0x43(%edi)
+   3:	43                   	inc    %ebx
+   4:	3a 20                	cmp    (%eax),%ah
+   6:	28 47 4e             	sub    %al,0x4e(%edi)
+   9:	55                   	push   %ebp
+   a:	29 20                	sub    %esp,(%eax)
+   c:	34 2e                	xor    $0x2e,%al
+   e:	31 2e                	xor    %ebp,(%esi)
+  10:	32 20                	xor    (%eax),%ah
+  12:	32 30                	xor    (%eax),%dh
+  14:	30 38                	xor    %bh,(%eax)
+  16:	30 37                	xor    %dh,(%edi)
+  18:	30 34 20             	xor    %dh,(%eax)
+  1b:	28 52 65             	sub    %dl,0x65(%edx)
+  1e:	64 20 48 61          	and    %cl,%fs:0x61(%eax)
+  22:	74 20                	je     44 <main+0x3f>
+  24:	34 2e                	xor    $0x2e,%al
+  26:	31 2e                	xor    %ebp,(%esi)
+  28:	32 2d 34 38 29 00    	xor    0x293834,%ch

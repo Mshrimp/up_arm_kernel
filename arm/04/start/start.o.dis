@@ -1,0 +1,37 @@
+
+start.o:     file format elf32-littlearm
+
+
+Disassembly of section .text:
+
+00000000 <main>:
+   0:	e1a0a00e 	mov	sl, lr
+   4:	e59f000c 	ldr	r0, [pc, #12]	; 18 <main+0x18>
+   8:	ebfffffe 	bl	0 <printf>
+   c:	e3a00000 	mov	r0, #0
+  10:	e1a0e00a 	mov	lr, sl
+  14:	e1a0f00e 	mov	pc, lr
+  18:	00000000 	andeq	r0, r0, r0
+
+Disassembly of section .rodata:
+
+00000000 <.rodata>:
+   0:	6c6c6568 	cfstr64vs	mvdx6, [ip], #-416	; 0xfffffe60
+   4:	6f77206f 	svcvs	0x0077206f
+   8:	0a646c72 	beq	191b1d8 <main+0x191b1d8>
+   c:	00000000 	andeq	r0, r0, r0
+
+Disassembly of section .ARM.attributes:
+
+00000000 <.ARM.attributes>:
+   0:	00002541 	andeq	r2, r0, r1, asr #10
+   4:	61656100 	cmnvs	r5, r0, lsl #2
+   8:	01006962 	tsteq	r0, r2, ror #18
+   c:	0000001b 	andeq	r0, r0, fp, lsl r0
+  10:	4d524105 	ldfmie	f4, [r2, #-20]	; 0xffffffec
+  14:	36373131 	undefined instruction 0x36373131
+  18:	2d465a4a 	vstrcs	s11, [r6, #-296]	; 0xfffffed8
+  1c:	09060053 	stmdbeq	r6, {r0, r1, r4, r6}
+  20:	01090108 	tsteq	r9, r8, lsl #2
+  24:	Address 0x00000024 is out of bounds.
+

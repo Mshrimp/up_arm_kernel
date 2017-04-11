@@ -1,0 +1,2732 @@
+
+		app
+		libc
+		api	(open(/dev/xxx),read,write,ioctl)
+			(mmap(/dev/fb)
+	kernel(提供接口api, 管理设备(设备))
+		board(硬件)
+
+开发板:
+arm:方案公司	(arm核 cortex-a9 * 4)
+	处理器核心
+	运算, 内存管理, ...
+	
+三星:芯片公司
+	EXYNOS4412	(soc片上系统)
+	控制外设, 显示屏, 触摸屏, 重力感应, 光感, ... 
+
+外设:
+开发板:
+	tiny4412	(up6410 ...)
+	.... .... ....
+	
+裸板代码:
+		
+
+. 启动过程:
+	x86 :
+	上电自检 -> BIOS(初始化, 自检) -> 显示屏 -> cmos(密码)(电池) 
+				(EEPROM)						(SRAM)
+				BL0
+
+	-> 启动方式 -> 初始化启动设备, 读启动设备 -> 硬盘/usb/net/cd
+
+	-> 引导分区(0x55AA) -> grub -> grub.conf -> kernel 
+						   (BL1)				(OS)
+
+	-> vmlinuz-2.6.18-194.el5PAE -> kernel running -> mount 
+	
+	-> initrd(根文件系统)(内存文件系统) -> mount 和 .ko ... 
+
+	-> mount / (root=LABEL=/) -> /sbin/init 1 -> inittab -> 
+
+	-> 启动所有其他进程 
+
+	arm:
+	BL0 上电自检(关看门狗, 初始化时钟) -> OM -> sd/mmc/emmc ..
+	(soc自带代码)
+
+	-> sd/mmc control -> 读sd卡(位置) -> BL1 -> SRAM -> DDR init
+
+	-> 读sd卡(位置)内核 -> kernel -> ...... 
+	
+	Bootloader = BL0 + BL1
+	
+. 搭建交叉编译环境:
+	tar xf arm-linux-gcc-4.5.1-v6-vfp-20120301.tgz
+	mkdir /usr/local/arm
+	cp opt/FriendlyARM/toolschain/4.5.1/ /usr/local/arm
+
+	vim /root/.bash_profile
+	PATH=/usr/local/arm/4.5.1/bin/:$PATH
+	export PATH
+
+	注销重新登录用户;
+
+	测试:
+		arm-linux-gcc -v
+		测试版本为4.5.1为成功;
+
+. 交叉编译:
+	pc机上编译, arm 上运行;
+
+. 参考01/Readme-uboot.txt
+. 编译u-boot:
+	make tiny4412_config
+	make
+
+. 烧写u-boot:
+	make -C sd_fuse/
+	cd sd_fuse/tiny4412/
+	./sd_fusing.sh /dev/sdx	(烧写)
+
+. u-boot命令:
+	printenv
+		baudrate=115200
+		bootcmd=movi read kernel 0 40008000;movi read rootfs 0 41000000 400000;bootm 40008000 41000000
+		bootdelay=3
+		bootargs=......
+	setenv bootdelay 10
+	saveenv
+
+. 网络文件系统:
+	pc 开发 --> board 直接运行
+		
+	pc机:
+	mkdir /nfsroot
+	vim /etc/exports
+	/nfsroot *(rw,sync,no_root_squash)
+	
+	service nfs restart
+	showmount -e 2.2.2.8
+
+	tar xf rootfs_qtopia_qt4-20140124.tar.gz -C /nfsroot
+	cd /nfsroot
+	mv rootfs_qtopia_qt4/* .
+
+	[root@localhost nfsroot]# ls
+	bin   etc                 lib      opt   sbin   tmp  www
+	data  fa-network-service  linuxrc  proc  share  usr
+	dev   home                mnt      root  sys    var
+
+	uboot下:
+	下载: zImage
+		  ramdisk-u.img
+	
+	setenv bootargs root=/dev/nfs rw nfsroot=2.2.2.8:/nfsroot ip=2.2.2.123 console=ttySAC0,115200 lcd=S70 ctp=3
+	saveenv
+	reset
+
+. qt文件系统的启动脚本
+	etc/init.d/rcS	(整个系统的启动脚本)
+
+	/bin/qtopia &	qt2.2 系统
+
+	/bin/qt4 &		qt4.8 系统
+
+	./run 自己设计的qt程序;
+
+. 简单文件系统制作
+
+	操作系统: 内核 + 文件(应用, 配置, 设备, ...);
+
+		bootloader: u-boot (交互界面) # lsX
+						help
+
+		kernel    : linux  (没有交互)
+		filesystem: rootfs android qt_rootfs ... 
+						   ....    ....
+					shell
+
+. 编译出命令:
+. 解压缩:
+	tar xf busybox-1.17.2-20101120.tgz	(linux基本命令)
+	cd busybox-1.17.2
+. 编辑:
+	配置:
+	make defconfig	(默认)
+	make menuconfig	(修改默认配置)
+		Busybox Settings  --->
+			-> Build Options 
+				-> (arm-linux-) Cross Compiler prefix
+					^^^^^^^^^^ 交叉编译
+					arm-linux-gcc  指定编译工具为交叉编译器;
+
+	make && make install
+	^		^
+	编译	安装(拷贝)
+
+	注意: 编辑完时提示; 执行程序需要的依赖库;
+		Trying libraries: crypt m
+		Library crypt is not needed, excluding it
+		Library m is needed, can't exclude it (yet)
+
+	拷贝安装完的命令:
+		cp ./_install/* /nfsroot -rf
+					  	
+	执行失败????
+		编译时使用动态链接;
+
+. 添加库文件和动态链接加载器(执行命令需要依赖库)
+	mkdir /nfsroot/lib
+	cp /usr/local/arm/4.5.1/arm-none-linux-gnueabi/lib/* /nfsroot/lib -rf
+	   ^ arm 架构的库和加载器
+
+. 设备文件: (应用运行需要)
+	mkdir /nfsroot/dev /nfsroot/sys /nfsroot/proc /nfsroot/tmp
+	mkdir /nfsroot/etc
+
+	mkdir /nfsroot/etc/init.d
+
+	编辑启动脚本:
+	vim /nfsroot/etc/init.d/rcS
+		#!/bin/sh
+
+		//挂载虚拟文件系统:
+		//	proc虚拟文件系统 : ps top 
+		//		kernel运行状况, 进程信息;
+		/bin/mount -t proc  none /proc
+
+		//	sysfs虚拟文件系统: mdev
+		//		kernel中所有的支持的设备信息;
+		/bin/mount -t sysfs none /sys
+
+		//	tmpfs虚拟文件系统: 
+		//		断电清空数据/dev /tmp
+		/bin/mount -t tmpfs none /dev
+		//						 ^^^^ 
+		///dev实时描述当前kernel中支持的所有设备的节点;
+
+		//	tmpfs同上;
+		/bin/mount -t tmpfs none /tmp
+
+		//mdev -s : 扫描/sys目录, 在/dev目录下生成设备节点;
+		//busybox中有mdev, x86下没有;
+		/sbin/mdev -s
+
+		//支持热插拔; 需要kernel监听设备的插入拔出并调用/sbin/mdev命令;
+		echo /sbin/mdev > /proc/sys/kernel/hotplug
+
+	设置脚本的执行权限:
+	chmod 777 rcS
+
+. 编辑init进程启动配置文件:
+	vim /nfsroot/etc/inittab
+		系统启动自动执行脚本:
+		::sysinit:/etc/init.d/rcS	(系统启动时执行)
+
+		执行完脚本,执行shell, 指定shell输入输出终端ttySAC0:
+		ttySAC0::respawn:/bin/sh	(任何时候都执行)
+
+	注意: 不需要添加inittab; 
+		ramdisk-u.img --> inittab --> rcS
+			^ 根文件系统;
+
+. 补充知识:
+	. 程序编译原理:
+	gcc -E 
+	gcc -S
+	gcc -c
+	ld /usr/lib/crt* 	-lc --dynamic-linker /lib/ld-linux.so.2 test.o -o test
+				^		^		^					^
+				_start  动态库	指定       动态链接加载器		目标文件  可执行文件
+
+	nm查看符号表命令:
+	nm /usr/lib/crt1.o
+	08048280 T _start
+			 ^
+			 导出符号
+			 我们实现了_start
+
+			 U main
+			 ^
+			 导入符号
+	_start : 程序的入口;
+	main   : C 语言入口;
+
+	. 执行时依赖:
+		1) 动态库
+		2) 动态链接加载器
+		
+. 自己编译kernel:
+	cp tiny4412_linux_define .config
+	make menuconfig
+		-> System Type 
+			-> [ ] Support TrustZone-enabled Trusted Execution Environment
+				^ 三星的安全模式;
+
+	使用4核编译
+	make -j4
+
+	生成代码:
+		linux-3.5/arch/arm/boot/zImage
+
+-----------------------------------------------------
+. 在开发板上写程序:
+	
+. hello world程序
+	1. .c					选择语言;
+	2. #include <stdio.h>	编译阶段检查函数类型;
+	3. int main(void)		程序的入口;
+	4. printf();			函数调用??
+	5. return 0;			怎么返回??返回什么值??
+	6. gcc 					怎么编译??
+	7. ./a.out				怎么执行??
+
+. 不同的架构(系统)执行程序:	
+	qt/rootfs:
+		# ./main
+			正常执行;
+
+	android:
+		# java
+		# mount -o remount /dev/block/mmcblk0p2 /system
+				   重新挂载(读写权限)
+		# ./main
+		sh: ./main: No such file or directory
+			库和动态链接加载器找不到;
+		# arm-linux-gcc -Wl,-dynamic-linker=/system/lib/ld-linux.so.3 main.c -o main
+			指定执行时的动态链接加载器;
+		# adb push main /cache
+		# ./main
+		hello world
+
+	pc:
+		adb push /usr/local/arm/4.5.1/arm-none-linux-gnueabi/lib/libc.so.6 /system/lib
+		adb push /usr/local/arm/4.5.1/arm-none-linux-gnueabi/lib/ld-linux.so.3 /system/lib
+
+. 不同架构(硬件)架构:
+		   x86/arm
+	arm-linux-gcc main.c -o main (arm)
+
+	gcc main.c -o main	(x86)
+
+	扩展知识:
+		架构: arm 	x86
+			  + -   + -
+			  * /	* /
+		体系结构:(指令集)
+			  armv1
+			  armv2
+			  armv3
+			  armv4
+			  armv5			arm-linux-gcc 3.2.1
+			  armv6			arm-linux-gcc 4.3.2
+			  				arm-linux-gcc 4.5.1
+			  armv7
+		处理器核心:
+			  cortex-a9	--> armv7
+			  cortex-a8 --> armv7
+			  arm11	--> armv6
+			  	arm1176jzfs
+			  arm10	--> armv6
+			  arm9
+			  arm7
+		soc:	
+			  exynos4412
+
+. 汇编:
+	main -> printf
+			libc.so
+
+. ATPCS
+	ATPCS 调用规范;
+	arm 和 thumb 指令调用函数的规范;
+
+	r0-r3 stack
+	stmfd 
+	r0
+	r11 r12 r13 r14 r15
+	fp  ip  sp  lr	pc
+
+. 伪指令:
+	辅助编译
+	.section	段名	
+		.text	只读
+		.rodata	只读
+		.data	读写
+		.bss	读写
+
+		.section	A
+		...
+		 ...
+		.section	B
+		...
+		...
+	
+	.string		字符串
+	.ascii		"hello world\0"
+	.asciz		"hello world"
+		.string "hello world"
+
+	.global		符号
+		导出符号
+		给外部调用的符号
+	
+	.align	2
+		2^2地址对齐;
+		1.定长指令对齐访问;
+		2.效率快;
+			4B 4B
+			1B 3B
+		
+		精简指令集(定长指令):
+			arm thumb
+			4B	2B
+			一个指令实现简单操作;
+			一个复杂操作需要多条指令合作完成;
+			@mov r0, #0xffff0000
+			mov r0, #0xff000000
+			add r0, #0x00ff0000
+
+		复杂指令集(不定长指令):
+			x86
+			?B
+			一个指令实现复杂操作;
+			
+. 寄存器: (不在内存里)
+	r0 - r15
+
+. atpcs 调用规范:
+	r0 : 1)返回值;
+		 2)传参的第一个参数;
+	r1 : 1)传参的第二个参数;
+	r2 : 1)传参的第三个参数;
+	r3 : 1)传参的第四个参数;
+	参数超过4个使用stack;
+		push {r1,r2,r3}
+		pop {r1,r2,r3}
+
+	r0-r3: 函数中使用r0-r3不保护;
+	r4-r14:函数中使用r4-r14一定要保护;
+
+	fp(r11) : 帧指针; (sp内数据偏移)
+	ip(r12) : 临时寄存器; 保存sp;
+	sp(r13)	: 指向栈底部;
+	lr(r14) : 存函数返回地址;
+	pc(r15) : 程序计数器; (程序指针)	
+
+. 立即数(数字常量)
+	#0	--> 0
+	#100--> 100
+
+. 合法立即数:
+	0x00000020 r>>8 --> 0x20000000
+	立即数满足:
+		由一个8位数循环右移偶数位得到;
+					 0 2 4 6 8 10 12 14 16 ... 30 
+	
+	0x   3    f    c    0    0    0    0    0
+	0b0011 1111	1100 0000 0000 0000 0000 0000
+
+	0x   0    0    0    0    0    0    f    f
+	0b0000 0000 0000 0000 0000 0000 1111 1111
+
+	0xff r>>10  --> 0x3fc00000 
+
+. 数据处理指令
+	mov :	=
+		mov 目标寄存器, 源寄存器
+			rd, 		rn
+
+		mov rd, rn					rd = rn;
+		mov rd, #0					rd = 0;
+		mov rd, #(10-2*3)			rd = 10-2*3
+		mov rd, rn, lsl #1			rd = rn << 1
+		mov rd, rn, lsr #1			rd = rn >> 1
+		mov rd, rn, asl	#1			rd = rn << 1
+		mov rd, rn, asr #1			rd = rn >> 1	
+		mov rd, rn, ror #1			rd = rn r>> 1
+						0-31
+		mov rd, rn, ror rm			rd = rn r>> rm
+						??
+	
+	mvn :	~=
+		mvn rd, rn					rd ~= rn
+		mvn rd, #0					rd ~= 0
+		....
+	
+	add :	+
+		add rd, rn, rm				rd = rn + rm
+		add rd, rn, #1				rd = rn + 1
+		add rd, rn, rm, lsl #1		rd = rn + (rm << 1)
+		...
+		add rd, rd, #1				rd ++;
+		add rd, #1					rd ++;
+
+	adc :
+		adc rd, rn, rm				rd = rn + rm + Cbit
+		...
+
+	sub :	-
+		sub rd, rn, rm				rd = rn - rm
+		sub	rd, rn, rm, lsl #1		rd = rn - (rm<<1)
+		sub rd, rn, #100			rd = rn - 100
+		...
+		
+		sub rd, rd, #1				rd --
+		sub rd, #1					rd --
+
+	sbc :
+		sbc rd, rn, rm				rd = rn - rm - 1 + Cbit
+	
+	rsb : 反-
+		rsb rd, rn, rm				rd = rm - rn
+		rsb rd, rn, #100			rd = 100 - rn
+		...
+
+	rsc :  
+		rsc rd, rn, rm				rd = rm - rn - 1 + Cbit
+
+	and :	&
+		1)清0
+		2)取位
+
+	orr :	|
+		1)置1
+
+	eor :	^
+		1)取反
+		2)加密和解密
+
+	bic	:	&~
+		1)清位
+		bic rd, rn, rm				rd = rn & (~rm)
+
+. 乘法指令:
+	mul : *
+		mul	rd, rn, rm				rd = rn * rm
+		mul	rd, rn, #100	X
+		mul rd, rn, #()		X
+		mul rd, rn, rm, lsl #1	X
+		mul	rd, rn, rm, lsl rs	X
+		
+	mla : *
+		mla rd, rn, rm, rs			rd = rn * rm + rs
+		
+	smull: *
+		smull rdL, rdH, rn, rm		
+			
+	umull: *
+		umull rdL, rdH, rn, rm
+
+	smlal: * +
+		smlal rdL, rdH, rn, rm 	(rdH rdL)=rn*rm+(rdH rdL)
+
+	umlal: * +
+		umlal rdL, rdH, rn, rm 	(rdH rdL)=rn*rm+(rdH rdL)
+
+	div : 
+		armv7
+
+. 分支指令:
+	bl	:
+		bl	label					lr = 返回地址
+									pc = label
+
+	b	:
+		b	label					pc = label
+
+	bx	:
+		bx	rn
+			rn.0 = 0 --> ARM
+			rn.0 = 1 --> THUMB
+
+	blx	:
+		blx	rn
+			
+. 内存访问指令:
+	ldr	:
+		ldr r0, =.LC0				r0 = .LC0
+
+	push:
+		push {r4}					r4 放入 栈中;
+
+	pop:
+		pop	{r0}					出栈 到 r0;
+
+. 练习:
+	1. printf("val = %d \n", 1023 * 23 - (34 + 12) >> 3 | (1<<14) + 3487 & (0x37<<12) ^ 0xff);
+
+	100 0000 0000
+	011 1111 1111
+
+
+. 当前程序状态寄存器
+	cpsr
+		[31] [30] [29] [28]
+		 N    Z    C    V
+		 		   ^	^
+	  符号位	  32bit 31bit
+			 零位	  	
+
+. 其他指令:
+	mrs rd, cpsr 			--> rd = cpsr
+
+	msr cpsr, rd			--> cpsr = rd
+
+	普通用户只能修改: N Z C V
+
+. 指令:
+	xxx+s : 修改当前状态寄存器;
+			cpsr 
+
+. 比较指令:
+	subs --> cpsr
+	a > b
+	a - b > 0
+
+	cmp	:
+		cmp	rd, rn			比较rd和rn
+		cmp rd, #10			比较rd和10
+	
+	等价于:
+		subs rd, rd, rn			
+
+		al 	--> 
+		ne	--> Z
+		eq	--> Z
+		lt
+		le
+		gt
+		ge
+
+	cmn	:
+		cmn rd, rn
+		cmn rd, #10
+
+	等价于:
+		adds rd, rd, rn
+
+	teq	:
+		teq	rd, rn
+		teq rd, #10
+
+	等价于:
+		eors rd, rd, rn
+		eq --> 相等
+		ne --> 不等
+
+	tst :
+		tst rd, rn
+		tst rd, #1
+
+	等价于:
+		ands rd, rd, rn		
+		ne --> 为1
+		eq --> 为0
+
+. 条件执行:
+	所有的arm 指令都是有条件执行;
+		后缀:
+			al (默认后缀)
+			eq ==	Z 
+			ne !=	Z
+			lt <	N
+			gt >	N 
+			le <=	N Z
+			ge >=	N Z
+
+. if/for/while
+	分支和循环
+	条件执行;
+	b	
+
+. 临时标签
+	可以重复出现;
+	数字命名:
+		1:
+		2:
+		3:
+	b	1b	(向回跳转, 向上)
+	b	1f	(向前跳转, 向下)
+
+. printf --> r0-r3 cpsr
+. cmp 后面不能加条件;
+
+
+homework:
+	2. r1 = 0xff;
+		把r1第3 位清零;
+		0b1111 0111
+
+	3. r1 = 0xff;
+		把r1第3 5 7位清零;
+		0b0101 0111
+
+	4. r1 = 0xf0;
+		把r1第3 位置1;
+		0b1111 1000
+
+	5. r1 = 0xff00;
+		把r1第3 5 7位置1;
+
+		0b1111 1111 1010 1000
+
+	6. r1 = 0xff37;
+		把r1第3~12位设置成0x327;
+		0xff37
+		1111 1111 0011 0111
+		   1 1001 0011 1
+		1111 1001 0011 1111
+
+	7. r1 = 0xff37;
+		把r1第3~12位设置成取反;
+		eor
+		0b1111 1111 0011 0111
+			 1 1111 1111 1
+		  1110 0000 1100 1111
+
+	8. r1 = 0xff37
+		把r1第3~12位打印出来;
+		ob1111 1111 0011 0111
+		     1 1111 1111 1
+
+			 11 1110 0110
+			
+流程控制:
+	1.  
+	if( i > 10 && i < 20)
+		printf("i > 10 && i < 20\n");
+	else if( i > 20 && i < 60 )
+		printf("i > 20 && i < 60\n");
+	else if( i > 60 && i < 90 )
+		printf("i > 60 && i < 90\n");
+	else if( i < 10 || i > 90 )
+		printf("other\n");
+
+	(注意: cmp后不要加条件)
+
+	2.  输出1-100的奇数;
+	3.  输出100个随机数;    random();
+	4.  输出100个随机奇数;
+	5.  输出100个256内随机奇数;
+	6.  9*9 乘法表;
+	7.
+	高从1 到 10的三角;      **********
+	^    ^  ^
+	*
+	**
+	***
+	****        高为4 ;
+	***
+	**
+	*
+
+	8.
+	半径从1 到 10的菱形;
+
+	   *
+	  ***
+	 *****
+	*******    半径为4 ;
+	 *****     2*(4-1-i)-1
+	  ***      2*(4-1-i)-1
+	   *
+
+. 效率:
+. if 
+	cmp 
+	xxxlt
+	xxxlt
+	xxxge
+	xxxge
+
+	cmp 
+	blt
+	bge	
+1:
+	...
+	xxx
+	xxx
+	b	out
+2:
+	xxx
+	xxx
+	b	out
+
+out:
+
+. for
+	for(i = 0; i < 1000w; i++)
+		xxx			3000w指令周期; 1000w+2
+	三条指令周期;
+		^^^^^^^^
+
+. 指令执行的流程:
+	流水线作业:
+	取指		译码		执行		访存	回写 ...
+	取指令		翻译指令	执行指令
+pc:										1
+										2
+										3
+										4
+										5
+b							V
+add				V
+mov	V
+	
+	pc永远指向正在执行指令的下两条;
+
+. 分支指令会打断流水线;
+	顺序执行使用流水线, 提高效率;
+	for(i = 0; i < 1000w; i++)
+		xxx
+
+. 分支预测:
+	静态预测
+	动态预测
+
+. 展开循环体:
+	for(i = 0; i < 100w; i++)
+		xxx
+		xxx
+		...
+		xxx
+		xxx
+
+. 取指 --> 访问内存(效率低);
+	cache  缓存
+		
+	for(i = 0; i < 1000w; i++)
+		xxx
+
+. for(i = 0; i < 1000w; i++)
+	ar[i] = br[i];
+
+	ldr
+	str
+
+	ldm	--> 16*Word	(内存突发访问)
+	stm	--> 16*Word
+
+. dma 内存直接访问:
+	dma 直接拷贝;
+	src		des
+		-->
+		count
+		size
+
+. 算法:
+	if			....
+		...
+
+	switch(ch) 	ch==...
+		二分查找;
+		哈希;
+
+	5  6  8  9  10 13 14 19
+	
+key	-5
+
+	0  1  3  4  5  8  9  14
+
+  do1do2do3do4do5do6do7do8
+	    2  
+	    out
+
+. 内存访问指令:
+	ldr r0, =.LC0	
+	push {}
+	pop  {}
+
+	int i;
+	scanf("%d", &i);
+
+	sp(r13) 栈指针;
+		sub sp, sp, #4		开辟空间
+		add sp, sp, #4		释放空间
+
+	str:					存
+		str rd, [rn]				*rn = rd
+		str rd, [rn], #4
+		str rd, [rn, #8]
+		str rd, [rn, #(12+4)]
+		str rd, [rn, #8]!
+		str rd, [rn, rm, lsl #2]
+		str rd, [rn, rm]
+		strh rd, [rn], #2
+		strb rd, [rn], #1
+
+	ldr:					取
+		ldr rd, [rn]				rd = *rn
+		ldr rd, [rn], #4			rd = *rn
+									rn += 4
+		ldr rd, [rn, #8]			rd = *(rn+8)
+		ldr rd, [rn, #(2+2+4)]		
+		ldr rd, [rn, #8]!			rd = *(rn+8)
+									rn += 8
+		ldr rd, [rn, rm, lsl #2]	rd = *(rn+rm<<2)
+					     lsr
+		ldr rd, [rn, rm]
+
+		ldrh rd, [rn]				rd = (u16*)(rn)
+		ldrb rd, [rn]				rd = (u8*)(rn)
+
+	.word	: 字长;
+	.long	: long;
+	.short	: short;
+	.byte	: char;
+
+. atpcs 规定了栈的使用
+	满递减栈
+	递减满栈
+
+. ldr的伪指令:
+	ldr r0, =.LC0		跨段访问标签; 与地址相关指令;
+==>						r0=.LC0
+	ldr r0, [pc, #?]
+	bl	printf		
+	...
+	...
+.L0:
+	.word	.LC0		--> 地址(绝对地址);
+			^ 只有在链接后确定;
+
+	ld 1.o 2.o 3.o 4.o -o main
+
+		
+	ldr r0, .L0			不能跨段访问标签; 与地址无关指令;
+==> 					r0=*(.L0)
+	ldr r0, [pc, #?]	(相对地址)(相对于pc的地址)
+				 ^
+				 +/-4K
+				 汇编阶段;
+
+
+	adr r0, .L0			r0=.L0	不能跨段;
+==>
+	add r0, pc, #?
+				^
+				合法立即数
+	
+. 练习:
+1.
+	int ar[100];
+	for(i = 0; i < 100; i++)
+		ar[i] = i;
+	for(i = 0; i < 100; i++)
+		printf("ar[%d] = %d\n", i, ar[i]);
+
+2.
+	int ar[100];
+	int br[100];
+	srandom(getpid());
+	for(i = 0; i < 100; i++)
+		ar[i] = random() % 500;
+
+	for(i = 0; i < 100; i++)
+		br[i] = ar[i];
+
+	for(i = 0; i < 100; i++)
+		printf("ar[%d] = %d br[%d] = %d\n", i, ar[i], i, br[i]);
+
+3.
+    int cmp_int(const void *d1, const void *d2)
+    {
+        if(*(int*)d1 > *(int*)d2)
+            return 1;
+        else
+            return 0;
+    }
+
+    int ar[100];
+    int br[100];
+    srandom(getpid());
+    for(i = 0; i < 100; i++)
+        ar[i] = random() % 500;
+
+    for(i = 0; i < 100; i++)	 //25
+        br[i] = ar[i];
+
+    qsort(br, 100, sizeof(int), cmp_int);
+    for(i = 0; i < 100; i++)
+        printf("ar[%d] = %d br[%d] = %d\n", i, ar[i], i, br[i]);
+
+. ldm/stm (突发访问)
+	对内存的高效访问; 突发访问机制;
+	低对低, 高对高
+	ldmfd rd!, {r0-r3, r7-r10}	--> push {r0,r1,r2,r3,r7-r10}		
+		  rd地址开始取数据到r0,r1,r2,r3
+
+	递减满栈	fd
+	递减空栈	ed
+	递增满栈	fa
+	递增空栈	ea
+
+	f : 满; rd指向的地址有有效数据;
+			ldm : 先取再加减;
+			stm : 先加减再存;
+
+	e : 空;	rd指向的地址无有效数据;
+			ldm : 先加减再取;
+			stm : 先存再加减;
+
+	d : 递减; 	stm 方向递减;
+				ldm 方向递增;
+
+	a : 递增;	stm 方向递增;
+				ldm 方向递减;
+	
+	i : 增
+	d : 减
+	b : 先
+	a : 后
+
+	ib : 先增	stmib	stmfa	
+				ldmib	ldmed
+	ia : 后增
+				stmia	stmea
+				ldmia	ldmfd
+	db : 先减	
+				stmdb	stmfd
+				ldmdb	ldmea
+	da : 后减
+				stmda	stmed
+				ldmda	ldmfa
+
+	stmfd	stmdb
+	ldmfd 	ldmia
+
+. 看手册查指令:
+	arm 指令--> arm 手册;
+
+. .c --> .s --> .o
+	mul r1, r2, r1
+
+	1110 0000000 0 0001 0000 0001 1001 0010
+
+	mov r1, #123
+	
+	....
+
+. .o --> .s
+	e3a02014
+
+	1110 0011 1010 0000 0010 0000 0001 0100
+
+	al
+	mov r2, #20
+
+
+.homework
+1.
+	cpylt	r1, r2
+	1011 00011010 0000 0001 00000000 0010
+
+2.
+	revgt r1, r3
+	1100 011 01011 1111 0001 1111 0011 0011
+	
+3.
+	smlalbtgt r2, r1, r3, r4
+	1100 00010100 0001 0010 0100 1100 0011	
+
+4.
+	b	loop		@相对跳转指令;	
+					@绝对跳转指令; 	bx rn
+					@	 			mov pc, ??
+	1110 1010 24bit
+
+		ram --> ddr
+	0x200000	0x40000000
+
+		+/-8M 指令
+		+/-32M
+					mov pc, ?
+					ldr pc, =main
+
+5.
+	0x00010f14
+	andeq r0, r1, r4, LSL pc
+
+	0x00008460
+	andeq r8, r0, r0, ror #8
+
+6.
+	打开文件;对文件中的数据排序;
+	每行排序;写回去;
+	qsort
+
+=====================================================
+. 系统之前写代码(裸板代码)
+	bootloader = BL0(rom) + BL1(ram) + BL2(ddr)
+				(芯片内置)
+			
+	./main : elf 头 + 代码
+			 操作系统解析elf 头, arm, .text .rodata 
+			 段大小, 文件存储位置, 内存的加载位置
+		shell -> ./main -> fork -> execve -> 入口 -> main
+	
+	怎么写??
+	怎么编译??
+	怎么执行??
+	在那里执行??
+		0x40000000 - 0x80000000
+
+. 访问内存
+	arm --> SOC --> 控制器 -> DDR
+					???
+			board-> ???
+
+	
+	SOC : Exynos 4412
+	
+. 1章:
+	SOC 的所有控制器, 可以接设备外设;
+	
+		64bit/128bit bus 
+		
+		AXI 
+			--> AHB --> AHB --> 高速设备 (内存)
+					--> APB --> 低速设备 (console)
+
+		X86 --> 总线--> 北桥--> 高速设备
+					--> 南桥--> 低速设备
+		
+		哈佛体系结构:
+			数据和指令分离
+			DCache/ICache
+
+		冯诺依曼体系结构:
+			数据和指令不分离
+
+. 2 章:
+	786pin
+	引脚接法
+
+. 3 章:
+	Memory Map
+	统一编址:
+		4412:
+			32bit -> 0-4G	
+	地址空间布局:			
+		0x0   - 0x0010000 		64K	IROM
+	0x2020000 - 0x2060000	   256K IRAM
+	0x4000000 - 0x5000000		16M	SROM
+			0x0					 0M  数据空间;
+	0x5000000 - 0x6000000		16M SROM
+	0x6000000 - 0x7000000		16M	SROM
+	0x7000000 - 0x8000000		16M SROM
+   0x10000000 -0x14000000		64M SFR
+   0x40000000 -0xA0000000	   1.5G DDR
+   		0x40000000 - 0x80000000  1G DDR 数据空间;
+   0xA0000000 -0x00000000	   1.5G DDR
+
+	独立编址:
+		地址空间 等同于 数据空间
+		INTEL:
+			EEPROM-> 0 - 1K
+			RAM	  -> 0 - 4K
+			DDR	  -> 0 - 4G
+				  -> 0 - 8G
+. 裸板程序:
+	arm-linux-gcc -c start.s 
+	arm-linux-ld start.o -o start
+	arm-linux-objcopy -O binary start start.bin
+
+	库中与环境相关的函数不能用, 和环境无关的函数可以静态链接使用;
+	
+. 关u-boot的MMU
+	vim include/configs/tiny4412.h
+		312	#undef CONFIG_ENABLE_MMU		//关闭MMU 内存映射;
+	vim board/samsung/tiny4412/config.mk
+		CONFIG_SYS_TEXT_BASE = 0x43e00000	//重新设置代码段地址;
+
+	make 
+	
+. 下载工具:
+	dnw
+
+	server(board):			client(pc):
+	dnw 0x50000000			dnw start.bin
+	go 0x50000000
+
+	fatload mmc 0:1 start.bin
+	bootdelay -> 1
+	setenv bootcmd ......
+
+. 调用u-boot中函数:
+	System.map		//静态符号表;
+
+	u-boot.map		//找函数源码;
+
+	printf			
+
+. ctags 工具
+	ctags -R
+	vim /etc/vimrc
+		set tags+=/share/arm/uboot_tiny4412-master/tags
+	
+	ctrl + ] 进入函数定义;
+			     类型定义;
+				 ....
+
+	ctrl + o 返回上一级;
+	
+. 4章:
+	CHIPID 
+		产品id
+		包信息
+
+. 5章:
+	启动流程;
+	BL0 -> BL1 -> 	OS
+	^		^		^
+	clock	clock	init 
+	stack	DRAM
+
+	XnRESET
+	Watchdog reset
+	Wake up from SLEEP
+	SW reset
+
+	BL0
+		clock_init
+
+	OM : OM1-OM5
+		OM2 -> 0/1
+			   eMMC
+			   SD/MMC
+			   nand flash
+			   usb
+
+. 6 章GPIO:
+	768pin 中 304个多功能;
+	304 multi-functional input/output port pins
+	164 memory port pins
+	37 general port groups
+		
+		A0 A1	相同功能的pin组;
+				uart0/1/2 or i2c
+
+	172 External Interrupts
+	32 External Wake-up Interrupts
+	252 multi-functional input/output ports
+
+	GPIO -> 304pin
+		 -> in/out
+		 -> uart/i2c/i2s/spi/....
+
+	GPA0CON	0x1140_0000	Port group GPA0 configuration register
+										功能选择:gpio
+	GPA0DAT	0x1140_0004	Port group GPA0 data register
+										收发:gpio
+	GPA0PUD
+	GPA0DRV
+	GPA0CONPDN
+	GPA0PUDPDN
+
+
+. LED 控制:
+	GPM4CON	0x110002E0
+		[15:12]		1		输出
+		[11:8]		1		输出
+		[7:4]		1		输出
+		[3:0]		1		输出
+
+	GPM4DAT	0x110002E4
+		[3]			0		输出低电平;
+		[2]			0
+		[1]			0
+		[0]			0
+
+	udelay : 0x43e26480
+	printf : 0x43e11a2c
+
+. 裸板开发
+	1. 找到设备;LED1 LED2 LED3 LED4
+			
+	2. 原理图上设备; LED1 .... LED4
+	   0: 亮
+	   1: 灭
+
+	3. SOC 链接设备LED1 ... LED4
+	   GPM4_0 ---> LED1
+	   GPM4_1 ---> LED2
+	   GPM4_2 ---> LED3
+	   GPM4_3 ---> LED4
+
+	4. 找数据手册怎么控制GPM4_0 - GPM4_3
+	   发现是多功能引脚;
+	   1)配置功能;
+	   	   GPM4CON	0x110002E0
+		   		[15:12]		1	
+		   		[11:8]		1
+		   		[7:4]		1
+		   		[3:0]		1
+	   2)输出....;
+	   	   GPM4DAT	0x110002E4
+		   		[3:0]		0	高
+							1	低
+	   非多功能引脚;
+	   1)具体控制器....
+
+练习:
+1.
+	灭所有的灯;
+2.
+	所有灯闪烁;
+3.
+	流水灯;
+	左闪烁到右
+	两边闪烁
+
+4.
+	按键	
+	key1	--> XEINT26	--> GPX3_2
+	key2	--> XEINT27	--> GPX3_3
+	key3	--> XEINT28	--> GPX3_4
+	key4	--> XEINT29	--> GPX3_5
+
+	GPX3CON		0x11000C60
+		[23:20]		0		input
+		[19:16]		0
+		[15:12]		0
+		[11:8]		0
+
+	GPX3DAT		0x11000C64
+		[5:2]		??		0: 按下;
+	    					1: 抬起;
+
+5.
+	蜂鸣器
+	BP1 	--> PWM0  --> XpwmTOUT0 --> GPD0_0
+
+	GPD0CON		0x114000A0
+		[3:0]		1
+
+	GPD0DAT		0x114000A4
+		[0]			1		1: 叫;
+							0: 停;
+
+homework:
+1.
+	按下key1 --> 叫;
+	按下key2 --> 停;
+
+2.
+	按下key1 --> led0亮
+	抬起key1 --> led0灭
+	...	key2 --> led1
+	... key2 --> led1
+	... key3 --> led2
+	... key3 --> led2
+	... key4 --> led3
+	... key4 --> led3
+
+3.
+	按下key1 --> led0亮
+	按下key1 --> led0灭;
+		key2 --> led1
+		key3 --> led2
+		key4 --> led3
+			开关;
+		
+. .s 和 .S
+	.c --> gcc -E -> gcc -S -> gcc -c -> ld
+
+	.s --> gcc -c -> ld
+
+	.S --> gcc -E -> gcc -c -> ld
+
+. 链接地址:
+	ld --> 0x8094
+	ld -Ttext 0x50000000 --> 
+	ld -Tdata 
+	   -Tbss
+
+. 运行地址:
+	dnw 0x50000000
+	dnw 0x60000000
+	go 0x50000000
+
+. 与地址相关指令: (链接地址和运行地址一致)
+	跨段访问的指令都是与地址相关;
+	ldr r0, =.LC0
+
+	绝对地址访问(与地址相关)
+
+. 与地址无关指令: (链接地址和运行地址可以不一致)
+	mov
+	add
+	ldr pc, .L0
+	adr pc, .L0
+	....
+	
+. 编译器优化
+	1)少代码;
+	2)位置重置;
+	3)高效的指令;
+	4)高效的算法;
+	....
+
+	volatile  
+
+. 带目录的Makefile:
+	TOPDIR = $(shell pwd)	//子目录访问顶层目录;
+	CROSS_COMPILE = arm-linux-		//交叉编译前缀;
+	export CROSS_COMPILE TOPDIR		//给子目录Makefile
+
+	include config.mk		//子目录页需要使用的;
+
+	TAG = start				//生成的目标;
+	OBJS = $(TOPDIR)/arch/arm/armv7/start.o	//入口;
+	LIBS += $(TOPDIR)/common/libcommon.a 	//子目录;
+	LIBS += $(TOPDIR)/drivers/libdrivers.a
+	LIBS += $(TOPDIR)/lib/libl.a 
+
+all: DOSOME					//先执行DOSOME, 再执行下面;
+	$(LD) $(LD_FLAGS) $(OBJS) $(LIBS) -o $(TAG)
+	$(OBJCOPY) $(OBJCOPY_FLAGS) $(TAG) $(TAG).bin
+	$(OBJDUMP) $(OBJDUMP_FLAGS) $(TAG) > $(TAG).dis
+
+DOSOME:		
+	循环进入子目录, 执行make all;
+	for subdir in $(dir $(LIBS)) $(dir $(OBJS)); do	\
+		make -C $$subdir all; done
+
+clean:
+	循环进入子目录, 执行make clean;
+	for subdir in $(dir $(LIBS)) $(dir $(OBJS)); do	\
+		make -C $$subdir clean; done
+	rm -rf $(TAG).*
+
+	include $(TOPDIR)/config.mk		//Makefile重复部分;
+
+	LIB = libdrivers.a				//生成静态库;
+	OBJ = bell.o key.o led.o s5p_gpio.o	//依赖的.o
+
+	all: $(OBJ)
+		$(AR) $(AR_FLAGS) $(LIB) $(OBJ)	//打包成库;
+
+clean:
+	rm -rf $(OBJ) $(LIB)		
+
+
+	$@ : 目标;
+	$< : 所有依赖;
+	$^ : 第一个依赖;
+
+. 链接脚本:
+	ld -Ttext
+	   -Tdata
+	   -Tbss
+
+	   -T start.lds
+
+	1)指定输入文件各个段在输出文件中的位置(start.bin 中的位置);
+									  布局;
+	2)指定输入文件各个段在程序运行时的内存中的位置(. = 0x50000000);
+											  布局;
+	
+	ENTRY(_start);
+	SECTIONS
+	{
+		/*. = 0x50000000;*/
+		.text 0x50000000 : AT(0x0) {	/*AT(0x0)	start.bin(0x0)*/
+			*(.text);
+		}
+
+		. = ALIGN(4);
+		.rodata : {
+			*(.rodata);
+		}
+
+		. = ALIGN(4);
+		.data : {
+			*(.data);
+		}
+
+		. = ALIGN(4);
+		__bss_start = .;		/*__bss_start:*/
+		.bss : {
+			*(.bss);
+		}
+		__bss_end = .;			/*__bss_end: */
+	}
+
+	extern void __bss_start(void);
+	extern void __bss_end(void);
+	memset(__bss_start, 0, __bss_end - __bss_start);
+
+	extern unsigned int __bss_start;
+	extern unsigned int __bss_end;
+	memset(&__bss_start, 0, (int)&__bss_end - (int)&__bss_start);
+
+	修改.bss布局(放到.data之前)
+
+	预习56章adc转换:
+
+. adc转换:
+	模拟到数字转换;
+	0-1.8V	1024 4096
+	0-3.3V 	1024	
+
+	U=IR
+	
+	传感器
+	温度 --> 电压	  -> ADC -> 数字信号 -> 转换成温度值
+	热敏电阻 
+
+	湿度 --> 电压	  -> ADC -> ....
+	...
+	亮度 --> 电压	  -> ADC -> ...
+	...
+	物理信号 模拟信号		  	数字信号
+
+	可调电阻()
+	
+	ADC
+	DAC
+	mp3解码 -> PCM解码 -> 数据信号 -> DAC -> 电压 -> 振动 -> 空气  
+		   	   16bit								 物理特性
+		       16bit
+
+	0-1024 精度;
+	0-4096 
+
+	CMOS : 0 ~ 1.8V
+	
+	1M/S : 5MHZ -> 1M/s 
+
+
+	ADC_CFG 	0x10010118
+		0: General ADC
+		1: MTCADC_ISP
+
+	ADC : 时钟源 PCLK (66MHZ) / 预分频(降低频率) (65+1)
+		  5MHZ
+	
+	ADCCON	0x126C0000		adc控制寄存器;
+		[16]	10bit/12bit
+		[15]	结束转换标志位
+		[14]	分频使能
+		[13:6]	分频的值	PCLK / (?+1) <= 5MHZ
+							100MHZ
+		[1]		读开始
+		[0]		手动开始	1 -> 0
+		
+	ADCDAT	0x126C000C		adc数据寄存器;
+		[11:0]	10bit/12bit
+	
+	ADCMUX	0x126C001C		adc通道选择寄存器; 同时只能选择一个通道;
+		[3:0]	0			AIN0	
+				1			AIN1
+				2			AIN2
+				3			AIN3
+	
+	CPACR, NSACR, HCPTR, and FPEXC 
+	浮点运算协处理器;
+		arm (避免)
+
+	工作模式:
+		轮询, 中断;
+		e 	 5	  1    f    f    0    0    4
+		1110 0101 0001 1111 1111 0000 0000 0100
+		al   ldr  
+		ldr pc, [pc, #-4]
+			0x02021428	(IRAM) 普通中断的处理代码; (IROM)
+
+			0x0202142c	(IRAM) 快速中断的处理代码; (IROM)	
+
+. MMU内存管理单元:
+	1)虚拟地址和物理地址映射;
+	2)地址的权限访问;
+		user: 	readwrite readonly 
+		kernel: readwrite readonly
+
+	普通中断入口: 0x18	0xffff0018
+	快速中断入口: 0x1c	0xffff001c
+				  ^		^
+				  IROM	没有DDR
+				  IRAM
+
+	虚拟地址:	0xffff0000
+		解决物理地址不够用;
+		与地址相关代码可以任意运行;
+		多任务;
+	
+	MPU: 内存保护单元
+
+. 协处理器:
+	扩展arm处理功能, 协助arm处理器工作;
+	
+. 处理器工作模式:
+	user 	FIQ 	IRQ		SVC		MON		ABT		HYP		UND		SYS
+普通用户 快速中断 普通中断 管理员 检测模式  异常  虚拟化  未定义   系统
+								 (安全扩展)		(虚拟化扩展)
+						   u-boot
+						   kernel
+	10000	10001	10010	10011	10110	10111	11010	11011  11111
+
+	r0-r12				
+			r8-r12_fiq
+	sp_user	sp_fiq	sp_irq	...
+	lr_user	lr_fiq	lr_irq
+	pc		
+	cpsr		
+			spsr_fiq spsr_irq ...
+
+. 模式切换:
+	异常发生;
+	user -异常-> 特权模式
+
+	user -异常-> kernel
+		 cpsr.M	
+
+	特权模式 -> cpsr -> user
+
+. 异常:										0x0			0xFFFF0000
+	Reset                 Supervisor		0x0			0xFFFF0000
+		复位异常			
+		reset				按键
+		wdt				硬件看门狗
+		sw ...			电源管理	
+
+	Undefined Instruction Undefined			0x4			0xFFFF0004
+		未定义异常		   译码阶段
+		...
+
+	Supervisor Call       Supervisor		0x8			0xFFFF0008
+		系统调用		  运行成功阶段
+		唯一从user 主动进入  内核的方法
+				   能正常返回
+
+		svc 
+		swi
+
+	Prefetch Abort        Abort				0xc			0xFFFF000c
+		预取指令异常	取指令阶段
+		MMU	发起异常
+
+	Data Abort            Abort				0x10		0xFFFF0010
+		预取数据异常	 运行阶段	
+		MMU	发起异常	  ldr 
+						  str
+
+	IRQ interrupt         IRQ				0x18		0xFFFF0018
+		普通中断		  硬件
+
+	FIQ interrupt         FIQ				0x1c		0xFFFF001c
+		快速中断		  硬件
+		
+. 异常向量表:
+	SCTLR.V
+	V=0				V=1
+	0x0				0xFFFF0000		复位异常入口
+	0x4				0xFFFF0004		未定义指令
+	0x8				0xFFFF0008		系统调用
+	0xc				0xFFFF000c		预取指令异常
+	0x10			0xFFFF0010		预取数据异常
+	0x14			0xFFFF0014		保留
+	0x18			0xFFFF0018		普通中断
+	0x1c			0xFFFF001c		快速中断
+
+	IROM			0x40000000 - 0x80000000
+	
+	MMU 使能
+
+	u-boot			kernel
+
+. 协处理器
+	协助arm 核工作的处理器
+	CP0 - CP15
+	CP15 : 系统控制协处理器
+		mrc p15, opt1, rt, cn, cm, opt2
+		mcr p15, opt1, rt, cn, cm, opt2
+			
+			opt1 cn cm opt2
+			0	 c2 c0	2		TTBCR
+			0	 c0 c0  0		MIDR
+			0	 c1 c0	0		SCTLR
+			...
+	
+	TTBCR  映射表控制寄存器;		
+		.N	 映射表大小; 0 表示16K 
+		mrc p15, 0, rt, c2, c0, 2
+
+	MIDR   主id寄存器
+		mrc p15, 0, rt, c0, c0, 0		MIDR --> rt		
+
+		mrc p?,opt1,rt, c?, c?, opt2
+
+	
+	SCTLR  系统控制寄存器
+		.V	 异常向量表基地址;
+		.M	 mmu 使能位;
+	
+		mrc p15, 0, rt, c1, c0, 0		SCTLR --> rt
+									0 c1 c0 0
+
+		mcr p15, 0, rt, c1, c0, 0		rt --> SCTLR
+									0 c1 c0 0
+
+	TTBR0  映射表基地址寄存器
+		[31:14]		TTB0_ADDR		16K对齐地址;
+
+		mrc p15, 0, rt, c2, c0, 0
+		mcr p15, 0, rt, c2, c0, 0
+
+
+	DACR   域访问控制寄存器
+		mrc p15, 0, rt, c3, c0, 0
+		mcr p15, 0, rt, c3, c0, 0
+
+	armv7.pdf
+		p1481		(cortex-a9 cp15协处理器的寄存器)
+		p1497		(TLB 寄存器)
+
+	ARM1176JZF-S.pdf
+		p146		(arm11	   cp15协处理器的寄存器)
+		p353		(mmu 映射表格式)
+
+. MMU:
+	一级页表段映射;
+		1M -> 1M
+		16M-> 16M
+
+	二级页表映射;
+		4K -> 4K
+		64K-> 64K
+
+	. mmu 开启后一切地址都是虚拟地址;
+
+	. 平板映射
+		0x50000000 -> 0x50000000
+		虚拟地址	  物理地址
+		0x60000000 -> 0x60000000
+		
+. 没有mmu的内存访问
+	cpu -> PADDR -> AXI -> DRAMC -> BK ROW COL -> DDR3 
+		<- DATA					 <- DATA
+
+. 映射的过程:
+	虚拟地址: 0xc2345678
+	物理地址: 0x57845678
+
+	1M映射: 0xc2300000 -> 0x57800000
+
+				  SCTLR.M  TTBR0[31:14]
+	cpu -> VADDR -> MMU -> TTB -> TTB_BASE[0xc23]->AXI->DRAMC -> DDR3 
+						   16K		
+						<-   								  <- DATA
+						-> [1:0]	0x2		段映射
+						   [18]		0		1M映射
+						   			1		16M 映射
+						   [8:5]	d0		域
+									...
+									d15		
+						-> d0 
+							-> DACR[1:0] 	
+									00 : 不可访问;
+									01 : 客户访问(需要检查权限)
+									10 : 保留未用; 
+									11 : 管理员访问(不用检查权限)
+						-> PA[31:20] = L1D[31:20]
+						-> PA[19:0] = VA[19:0]
+						-> PA[31:0] -> AXI -> DRAMC -> DDR3
+		<- DATA											<- DATA
+
+	TTB_BASE: 
+		[PA | 0x2]		1M映射
+		[PA | 0x2]		1M映射
+		[PA | 0x1]		粗页表映射
+[0xc23]	[PA | 0x2]		1M映射
+		...
+		[PA | 0x2]		1M映射
+		[PA | 0x2]		1M映射
+		[PA | 0x0]		无法访问
+
+	4G : 4096 		16K
+		 0xfff
+
+
+. 粗页表小页映射:
+	4K  映射关系	4K <-> 4K
+
+	虚拟地址: 0xc2386678
+	物理地址: 0x57845678
+
+	4K映射: 0xc2386000 -> 0x57845000
+
+				  SCTLR.M  TTBR0[31:14]
+	cpu -> VADDR -> MMU -> TTB -> TTB_BASE[0xc23]->AXI->DRAMC -> DDR3 
+						   16K		
+						<-   								  <- DATA
+						-> [1:0]	0x1		粗页表映射
+						   [8:5]	d0		域
+									...
+									d15		
+						-> d0 
+							-> DACR[1:0] 	
+									00 : 不可访问;
+									01 : 客户访问(需要检查权限)
+									10 : 保留未用; 
+									11 : 管理员访问(不用检查权限)
+						-> TTB2_BASE = L1D[31:10]
+						-> TTB2_BASE[0x86] -> AXI -> DRAMC -> DDR3
+						<-								   <- DATA
+						-> [1:0]	0x1		大页映射
+									0x2		小页映射	
+									0x3		小页映射
+									0x0		段错误
+						-> 0x2
+						-> PA[31:12] = L2D[31:12]
+						-> PA[11:0] = VA[11:0]
+						-> PA[31:0] -> AXI -> DRAMC -> DDR3
+		<-											<- DATA
+
+	TTB_BASE: 
+		[PA | 0x2]		1M映射
+		[PA | 0x2]		1M映射
+[0xc23]	[TTB2|0x1]		粗页表映射 ->
+									TTB2_BASE:
+										[PA | 0X2]
+										[PA | 0X1]	64K
+								[0x86]	[PA | 0X2]	4K		
+										....
+										[PA | 0X2]
+										[PA | 0X3]	4K
+										[PA | 0X2]
+		[PA | 0x2]		1M映射
+		...
+		[PA | 0x2]		1M映射
+		[PA | 0x2]		1M映射
+		[PA | 0x0]		无法访问
+
+	4G : 4096 		16K
+		 0xfff
+
+. SWAP分区: (交换分区)	
+	内存不够的交换分区;	
+
+. TLB 缓存
+	提高查表效率;
+	ITLB	指令
+	DTLB	数据
+	存的是虚拟地址和物理地址的映射关系;
+
+	p1497		(TLB寄存器)
+
+. Cache 缓存
+	提供内存访问效率;
+	ICache 	指令
+	DCache	数据
+	存的是地址和数据的映射关系;
+
+	SCTLR.		p1705	armv7.pdf
+		C
+		I
+	
+	TTB			p354	arm11xxx.pdf
+		C	
+		B
+
+. 异常处理:
+	0x0			0xffff0000
+	
+	. swi #5
+		软中断异常
+		系统调用异常
+
+		user -> open -> kernel -> sys_open
+			pc=open
+			bl	open
+
+			swi	#?				vector + 0x8
+				 ^系统调用号		判断什么系统调用??
+									open	
+									write	
+									read	
+									ioctl	
+									...
+		movs pc, lr
+
+	. undef 异常
+		1) .word 0xffffffff
+		2) 指令错位; .align	2	X
+		....
+		movs pc, lr
+
+	. dabort 异常
+		MMU :发起异常
+		
+		str r0, [r3]	
+		ldr r0, [r3]
+
+	. pabort 异常
+		MMU :发起异常
+		pc = addr
+
+	. reset  复位异常		
+		XnReset
+			按键
+
+		SW			p654		EXYNOS4412.pdf
+			SWRESET		0x10020400
+				[0]			1
+					
+		WDT reset	p1357		EXYNOS4412.pdf
+			WTCON		0x10060000
+				[15:8]		249			100MHZ/(249+1)
+				[5]			1			enable
+				[4:3]		3			100MHZ/(249+1)/128
+				[0]			1			reset signal
+
+			WTCNT		0x10060008
+				[15:0]		3125
+
+	. irq 	 异常
+		key
+		wdt
+		adc
+		...
+
+	. firq	 异常
+		...	
+
+. GIC	中断控制器:
+
+	SGI		软中断	
+		ID: 0-15
+			自定义中断
+
+	PPI		私有外设中断
+		ID: 16-31
+			
+	SPI		共享外设中断
+		ID: 32-159
+				
+	AMBA :
+		AXI
+		AHB
+		APB
+	
+	ICC:	0x10480000
+		ICCICR_CPUn		0x0
+			[0]			1		(cpu enable)
+
+		ICCPMR_CPUn		0x4
+			[7:0]				(优先级屏蔽)
+
+		ICCIAR_CPUn		0xc		R
+			[12:10]		SGI(CPUID)	
+			[9:0]		IRQID
+						(0-159)
+
+		ICCEOIR_CPUn	0x10	W
+			[12:10]		清 CPUID
+			[9:0]		清 IRQID
+
+	ICD:	0x10490000
+		ICDDCR			0x0			仲裁器使能
+			[0]			1
+
+		ICDISER_CPU		0x100
+			[31:0]		1			中断使能位;
+
+		ICDICER_CPU		0x180
+			[31:0]		1			中断关闭位;
+
+		ICDIPR_CPU		0x400 ~ 0x49C	中断优先级别
+			[31:24]		3				0 最大 255 最小
+			[23:16]		2
+			[15:8]		1
+			[7:0]		0
+	
+		ICDIPTR_CPU		0x800 ~ 0x89C	目标cpu	
+			[31:24]		3				00000001 : cpu0
+			[23:16]		2				00000010 : cpu1
+			[15:8]		1				00000011 : cpu0 和 cpu1
+			[7:0]		0			
+		
+		ICDSGIR			0xF00
+			[25:24]		00				使用[23:16]作为目标cpu	
+			[23:16]		1				00000011 : CPU0 and CPU1
+						cpu0
+			[3:0]		0-15			软中断号
+
+练习:
+1.
+	SGIID: 13
+
+2.
+	WDT	   75
+		1)复位; 喂狗;
+		2)定时器中断;
+			65535(16bit)
+
+3.
+	PWM TIMER4	73
+		1)定时器中断;
+			32bit 
+		2)脉冲宽度调制;
+			...
+
+. PWM	脉冲宽度调制定时器
+	timer0 1 2 3 4 
+	
+	timer0 timer1 		 -> 8bit 分频器 -> 1/1 1/2 1/4 1/8 1/16固定分频
+	timer2 timer3 timer4 -> 8bit 分频器 -> .....
+
+	timer0 1 2 3  --> I/O
+	
+	timer4 --> 
+
+	100000000HZ/(249+1)/4 = 100000HZ -> 1000000000ns/100000 -> 10000ns
+															-> 10us
+	
+	TCFG0		0x139D0000
+	配置预分频	
+		[23:16]		Dead zone length
+		[15:8]		Prescaler 1 value for Timer 2, 3, and 4
+		[7:0]		Prescaler 0 value for timer 0 and 1
+
+	TCFG1		0x139D0004
+	配置固定分频	
+		[19:16]		timer4 Mux input
+		[15:12]
+		[11:8]
+		[7:4]
+		[3:0]		timer0 Mux input
+	
+	TCONn		0x139D0008
+	配置寄存器
+		[22]		auto-reload
+		[21]		updates			timer4
+		[20]		start/stop
+		
+	TCNTB0		0x139D000C	
+	计数装载寄存器
+		[31:0]						0.1ms
+	TCNTB4		0x139D003C
+
+	TCMPB0		0x139D0010			设置占空比;	高电平保持的时长;
+	比较寄存器
+		[31:0]	
+
+	TCNTO0		0x139D0014			readonly	
+	读内部寄存器TCNTn的值
+		[31:0]	
+	TCNTO4		0x139D0040
+	
+	TINT_CSTAT	0x139D0044
+	中断使能/中断状态/清中断
+		[4:0]	中断使能
+		[9:5]	中断状态/清中断(write 1)
+
+	udelay -> timer4
+	(u-boot)	
+
+. 脉冲宽度调制:
+	XPWMTOUT0 -> bell
+	XPWMTOUT1
+	XPWMTOUT2
+	XPWMTOUT3
+
+. 有源蜂鸣器:
+		  振动
+	音调: 频率
+	音量: 幅度
+	音色: 介质
+
+. 外部中断:
+	GPX3_2 GPX3_3 GPX3_4 GPX3_5
+
+	GPX3CON	
+		[23:20]				0xf	
+		[19:16]				0xf
+		[15:12]				0xf
+		[11:8]				0xf			外部中断
+
+	EXT_INT43CON		0x11000E0C		配置触发方式;
+		[22:20]				0x2			
+		[18:16]				0x2			下降延触发;
+		[14:12]				0x2			
+		[10:8]				0x2
+		
+						0 : 低电平
+						1 : 高电平
+						2 : 下降延
+						3 : 上升延
+						4 : 双边延
+
+	EXT_INT43_MASK		0x11000F0C		使能外部中断
+		[5:2]				0b1111			enable eint irq
+	
+	EXT_INT43_PEND		0x11000F4C		中断状态/清中断 
+		[5:2]				0b1111			1: 来中断
+											0: 没中断
+							写1清除
+
+1. adc			42
+			组合器
+
+2. rtc
+							
+
+3. 超声波测距 
+
+
+. ADC中断组合器:
+	IESR2				0x10440020	
+		[19]				1				enable adc irq
+	
+	IECR2				0x10440024
+
+	ISTR2				0x10440028
+
+	IMSR2				0x1044002c
+		[19]				1				中断来了
+
+. rtc:	实时时钟控制器
+	BCD 	设置时间;	date
+		BCDSEC      REGB(0x0070)		1H
+		BCDMIN      REGB(0x0074)
+		BCDHOUR     REGB(0x0078)
+		BCDDAYWEEK  REGB(0x007c)		WEEK <-> DAY
+		BCDDAY      REGB(0x0080)
+		BCDMON      REGB(0x0084)
+		BCDYEAR     REGW(0x0088)
+
+	ALARM	设置闹钟时间; 产生中断;		76
+		ALMSEC      REGB(0x0054)
+		ALMMIN      REGB(0x0058)
+		ALMHOUR     REGB(0x005c)
+		ALMDAY      REGB(0x0060)
+		ALMMON      REGB(0x0064)
+		ALMYEAR     REGW(0x0068)
+		
+		RTCALM      REGB(0x0050)		设置计时
+		INTP        REGB(0x0030)		中断状态和清中断
+
+	TIC		设置定时时间;	32.768KHZ 	77
+		RTCCON      REGW(0x0040)		使能TIC
+		TICCNT      REGL(0x0044)		计数值	(当计数达到指定值时产生中断)
+
+		INTP        REGB(0x0030)		中断状态和清中断
+
+. HCSR
+	XEINT8		GPIO9		GPX1_0		TRIG
+	XEINT15		GPIO10		GPX1_7		ECHO
+	VDD_5		
+	DGND
+	
+	TRIG -> 1 -> 10us -> 0
+	
+	TIMER0 -> 0.1ms
+
+. IR
+	下降延; PWM_TIMER0 start
+	9ms + 4.5ms + 0.84ms 0/1
+	count ++
+
+	1 -> 
+	2 -> 
+	- -> 
+	+ -> 
+
+. PCLK --> 100MHZ
+  ????	   ????
+
+	BL0 (clock) -> SD/MMC/EMMC
+	BL1 (clock)	-> DRAMC
+	BL2	(clock) -> ...........
+
+. CMU	时钟管理单元
+	PLL		锁相环 : 倍频(24MHZ*?) 
+		APLL	ARMCLK
+		MPLL	DRAMC
+		EPLL	BUS OTHER
+		VPLL	Video
+		
+	CMU_CPU			CPU 1400MHZ
+	CMU_DMC			DRAM 400MHZ
+	CMU_LEFTBUS		200MHZ/100MHZ
+	CMU_RIGHTBUS	200MHZ/100MHZ
+	CMU_TOP 	
+
+	p455	
+
+	ARMCLK:
+		FINPLL -> APLL	-> MUXAPLL -> MUXCORE -> DIVCORE -> DIVCORE2 -> ARMCLK
+
+	
+	APLL_CON0	0x10044100		a0af0300
+		[31]		enable		1
+		[25:16]		m			af
+		[13:8]		p			03
+		[2:0]		s			0
+
+		FOUT = M * 24MHZ / (P * 2^S) = 1400MHZ
+			   175*24MHZ / (3 * 2^0)
+
+	CLK_SRC_CPU	0x10044200						01000001
+		[16]		1(SCLKMPLL)		MUXCORE		0
+					0(MOUTAPLL)
+		[0]			1(MOUTAPLLFOUT)	MUXAPLL		1
+	
+	CLK_DIV_CPU0	0x10044500					02167730
+		[30:28]		DIVCORE2					0
+		[2:0]		DIVCORE						0
+
+. SCLK_UART0~4:		UART0		100MHZ
+	...
+
+	SCLK_UART0 -> DIVUART0 -> MUXUART0 -> SCLKMPLL_USER_T -> MUXMPLL_CTRL_USER_T ->
+
+	SCLKMPLL -> MUXMPLL -> MPLL -> FINPLL (24MHZ)
+
+	CLK_DIV_PERIL0	0x1003C550		
+		[3:0]			7			DIVUART0
+						/(7+1)
+
+	CLK_SRC_PERIL0	0x1003C250		
+		[3:0]			6			MUXUART0
+						SCLKMPLL_USER_T
+	
+	CLK_SRC_TOP1	0x1003C214
+		[12]			1			MUXMPLL_USER_SEL_T
+						SCLKMPLL
+	
+	CLK_SRC_DMC		0x10040200	
+		[12]			1			MUXMPLL
+						MOUTMPLLFOUT
+
+	MPLL_CON0		0x10040108	
+		[25:16]			0x64		M
+		[13:8]			0x3			P
+		[2:0]			0x0			S
+			    FOUT = MDIV * FIN/(PDIV * 2^S)
+					   100    24MHZ/(3  * 2^0)
+					 = 800MHZ
+
+. uart 控制器:		uart总线;	
+	115200	: 数据传输的速度	
+	8N1		: 8bit数据位 N没有校验位 1一个停止位
+	
+	. 校验
+		crc
+		ecc
+		odd
+		even
+
+	. TXD	3.3v
+	  RXD
+	  nRTS
+	  nCTS
+
+	. 中断模式
+	  轮询模式	
+	  dma 模式
+
+	. 4 Mbps
+		115200bps		bit
+		波特率
+
+	. FIFO
+		FIFO TXD
+		FIFO RXD
+
+		256 ch0
+		64	ch1 ch4
+		16	ch2	ch3
+
+	. 流控
+		数据流控制;
+		接收端请求了, 发送端发送;
+		nRTS0
+		nCTS0
+
+		AFC : 自动流控
+			fifo
+
+	. 全双工
+	. 半双工
+
+	. 总线:
+		标准化的接口, 通讯协议;	
+		com0 -> usb 
+		gps
+		wifi
+		3g
+		...
+
+init:
+. base : 0x1380_0000
+	ULCONn		0x0000
+	8N1
+	[1:0]		3		8N1
+
+	UCONn		0x0004
+	控制寄存器
+	[3:2]		1		中断及轮询模式 
+	[1:0]		1		....
+
+
+	波特率发生器:
+	DIV_VAL = UBRDIVn + UFRACVALn/16
+	or
+	DIV_VAL = (SCLK_UART/(bps x 16)) - 1
+			  	100MHZ	115200
+			= 53.3
+
+	UBRDIVn 	0x0028
+	115200
+	[15:0]		53	
+
+	UFRACVALn 	0x002C
+	115200
+	[3:0]		5			0.3*16
+	
+	UTRSTATn	0x0010
+	状态寄存器
+	[2]			1		Transmitter (includes transmit buffer and shifter) empty
+	[1]			1		transmit Buffer is empty
+	[0]			1		Buffer has a received data ready
+
+. send
+	UTXHn		0x0020
+	[7:0]				Transmits data for UARTn
+
+. recv
+	URXHn		0x0024
+	接收buffer
+	[7:0]				Receives data for UARTn
+
+. FIFO
+	UFCONn		FIFO contrl
+		
+	UFSTATn		FIFO count
+
+. err:
+	UERSTATn	出错状态寄存器
+
+. AFC:
+	UMCONn		AFC
+		[0]		1 (请求发送)
+				0 (停止发送)
+	UMSTATn
+		[0]		1 (对方请求)
+				0 (对方无请求)
+		
+. Infra-Red Mode	
+	p1391
+
+. 驱动: 机制;
+  应用: 策略;
+
+. IR
+	XEINT15		GPIO10		GPX1_7		OUT
+	VDD_5		
+	DGND
+
+=======================================================
+
+. SCLK_FIMD0:		LCD
+
+	SCLK_FIMD0 -> DIV_FIMD0 -> MUX_FIMD0 	
+
+	100MHZ
+
+. 显示控制器:
+		
+	Frame Rate = 1/[{(VSPW + 1) + (VBPD + 1) + (LIINEVAL + 1) + (VFPD + 1)} X {(HSPW + 1) + (HBPD + 1) + (HFPD + 1) +
+	(HOZVAL + 1)} X {(CLKVAL + 1)/(Frequency of Clock source)}]
+	
+	LCDBASEU	内存地址起始
+
+	LCDBASEL	内存地址结束
+
+	PAGEWIDTH	显示屏宽
+
+	OFFSIZE		偏移(跳过)
+	
+	p1816
+	VSPW -> tvpw
+
+1. gpio功能配置:
+	GPF0CON
+					0x22222222
+
+	GPF1CON
+					0x22222222
+
+	GPF2CON
+					0x22222222
+
+	GPF3CON
+					0x2222
+	
+2. 时钟:
+	SCLK_FIMD0:		LCD
+	CLK_SRC_LCD0		0x1003C234
+		[3:0]				0x1		24MHZ
+							0x6		800MHZ
+
+	CLK_DIV_LCD			0x1003c534
+		[3:0]				0xf		800MHZ/(15+1) => 50MHZ
+							0x7		800MHZ/(7+1)  => 100MHZ
+
+	VIDCON0				0x11C00000
+		[13:6]				0x1		SCLK_FIMD0/(1+1)
+									100MHZ/2 ==> 50MHZ
+
+3. FIMD输出:
+	LCDBLK_CFG	       0x10010210
+		[1]					1
+
+4. 配置LCD 控制器;
+	1. VIDCON0: Configures video output format and displays enable/disable.
+		VIDCON0		0x11C00000
+			[13:6]		1			100MHZ/(1+1) => 50MHZ	VCLK
+			[1:0]		3			enable displays	最后开;
+
+	2. VIDCON1: Specifies RGB I/F control signal.	不同的屏不同;
+		VIDCON1		0x11C00004		控制信号的极性
+			[7]			1			
+			[6]			1
+			[5]			1
+			[4]			0			
+
+	6. VIDTCONx: Configures video output timing and determines the size of display.
+													不同的屏不同;
+		VIDTCON0	0x11C00010		
+			[23:16]		VBPD	tvb-tvpw-1	23-tvpw-1	20
+			[15:8]		VFPD	tvfp-1		7~147-1		22
+			[7:0]		VSPW	tvpw-1		1~20-1		1
+		
+		VIDTCON1	0x11C00014
+			[23:16]		HBPD	thb-thpw-1	46-thpw-1	43	
+			[15:8] 		HFPD	thfp-1		16~354-1	209
+			[7:0]  		HSPW	thpw-1		1~40-1		1
+
+		VIDTCON2	0x11C00018
+			[21:11]		LINEVAL	tvd-1		480-1		479	
+			[10:0]		HOZVAL	thd-1		800-1		799
+		
+	7. WINCONx: Specifies each window feature setting.不同的数据不同
+		WINCON0		0x11C00020	
+			[16]		1		half word swap	半字交换 (565)
+			[15]		1		word swap		字交换	 (888)
+			[5:2]		1011	888 24bit		像素数据的格式
+						0101	565	16bit	
+			[0]			1		enable			使能window输出
+
+	8. VIDOSDxA, VIDOSDxB: Specifies window position setting. 窗口位置;
+		VIDOSD0A	0x11C00040				左上角坐标;
+			[21:11]		0					x
+			[10:0]		0					y
+		
+		VIDOSD0B	0x11C00044				右下角坐标;
+			[21:11]		800					x
+			[10:0]		480					y
+
+		VIDOSD0C	0x11C00048				尺寸;
+			[23:0]		800*480
+		
+	12. VIDWxxADDx: Specifies source image address setting. 数据源位置
+		VIDW00ADD0B0	0x11C000A0			数据源起始地址
+			[31:0]			image start addr
+
+		VIDW00ADD1B0	0x11C000D0			数据源结束地址
+			[31:0]			image end 	addr	
+
+		VIDW00ADD2		0x11C00100			
+			[25:13]			0				偏移			
+			[12:0]			800 * 4			宽
+
+	22. SHDOWCON: Specifies shadow control register. DMA通道使能;
+		SHADOWCON		0x11C00034
+			[0]				1		enable Channel 0
+
+	驱动提供机制, 应用提供策略;
+
+homework: 应用;
+1.
+	显示圆球;	(x1-x2)^2 + (y1-y2)^2 <= r*r
+2.
+	弹球程序;	
+3.
+	显示图片;	
+	bmp		
+	位图格式;
+
+. 显示球
+
+. 弹球程序
+	双buffer显示	write(fd, &col, 4);
+					p[i][j] = col;
+	ldr	
+	str 
+
+	ldmfd {16}
+	stmfd {16}
+
+	ddr <- dma -> ddr -> dma -> LCD -> 
+
+	mmap();
+
+. framebuffer
+	/boot/grub/grub.conf
+		kernel /vmlinuz-2.6.18-194.el5PAE ro ... vga=0x317
+
+	ls /dev/fb0
+
+	struct fb_var_screeninfo var;
+	ioctl(fd, FBIOGET_VSCREENINFO, &var);	
+		xres
+		yres
+		bits_per_pixel
+
+	struct fb_fix_screeninfo fix;
+	ioctl(fd, FBIOGET_FSCREENINFO, &fix);	
+		smem_start
+		smem_len
+
+	mmap
+
+. 显示图片
+	. bmp 格式
+	. tools 工具 mkbmp
+	. bmp.h
+		u32 bitmap[] = {
+			..., ..., 
+
+		};
+
+	. open read write lseek close
+	  opendir readdir closedir
+
+. 显示ascii码
+	. asc8x6[]
+		字库位图;
+		ascii
+	. 字体大小;
+
+. 背光
+	gpio -> 1 
+		 -> 0
+
+	CPU -> DISPLAY -> CPLD -> LCD
+					  
+	mmu_init();
+	irq_enable();
+
+	gic_enable();
+	bl_start(127);	0-127
+
+	timer3_handler();	中断处理函数;
+		IDLE,
+		START,
+		REQUEST,
+			io_data(16bit)
+		WAITING,
+		RESPONSE,
+		STOPING,
+
+	pwm_timer3_init();
+		io_data
+			crc_tab
+
+		TCFG0
+		TCFG1
+		TCNTB3
+		TCON
+			Updatas TCNTB3
+			auto-reload
+			start timer
+		TINT_CSTAT
+			enable irq
+----------------------------------------------
+. 触摸屏
+	1)中断;
+	2)坐标;
+
+	CPU -> LCD1 -> SDA2    -> FT5206GE1 -> TP
+				   SCL2	   ->
+				   XEINT14 -> 
+
+. I2C 总线
+	SDA
+	SCL	
+
+	I2CCON		配置	100KHZ ~ 400KHZ
+		[7]		1 	应答使能;
+		[6]		0/1	固定分频; /16 /512
+		[5]		1	中断使能;
+		[4]			read(1) 来中断;
+						(0)	没来中断;
+					write(0)清中断;
+						 (1)无效;
+		[3:0]	0~15	四位预分频;
+
+	I2CSTAT		配置及其状态
+		[7:6]	10	主发送模式
+				11	主接收模式
+		[5]			read(1)	Busy
+						(0)	Not busy
+					write(1)Start
+						 (0)Stop
+		[4]		1	使能数据输出
+				0	关闭数据输出
+		[0]		0	接收ack 信号	
+		
+	I2CADD		从设备地址
+		[7:1]
+
+	I2CDS		收发数据
+		[7:0]		8bit数据位;
+
+	I2CLC		滤波和延迟
+		[2]			滤波使能;
+		[1:0]		延迟;
+		
+	
+	. gpio
+		GPD1_2 -> I2CSDA1 -> LCD1 -> 	
+		GPD1_3 -> I2CSCL1 -> LCD1 -> 
+
+		GPD1CON		0x114000C0
+			[15:12]		0x2
+			[11:8]		0x2
+
+	. 主		从1 slave_addr
+				从2	slave_addr
+				从3 slave_addr
+				...
+
+	  START
+	  STOP
+
+	  一个主对应多个从;
+	  [S][SLAVE_ADDR][R/W][A] [DATA][A] [DATA][A] ... [DATA][A] [DATA][A] [P]
+					  W:0
+					  R:1
+write:	  
+	  [S][SLAVE_ADDR][W][A]   [DATA_ADDR][A] [DATA][A] [P]
+
+read: 指定地址开始读;
+	  [S][SLAVE_ADDR][W][A]   [DATA_ADDR][A] [P]		   
+	  [S][SLAVE_ADDR][R][A]   [DATA_ADDR][A] [DATA][A] [DATA][A] [DATA][A][P]
+	
+Mread:从0 地址开始读;
+	  [S][SLAVE_ADDR][R][A]   [DATA_ADDR][A] [DATA][A] [DATA][A] [DATA][A][P]
+		
+. EEPROM		1010000
+	slave: 0xa0
+	看手册找EEPROM资源;
+
+. MMA7660FC		1001100
+	slave: 0x98
+	看手册找MMA7660FC资源;
+		1)轮询;
+		2)中断;
+
+-------------------------------------------------------
+. bootm 
+	bootloader
+	1)初始化内存, 串口;
+	2)movi read kernel 0 0x40008000
+	3)bootm 0x40008000		启动内核
+	4)bootargs				给内核传递参数
+
+	Booting:
+	1)初始化内存;
+		BL0 BL1
+
+	2)初始化串口;
+		kernel-parameters.txt
+		uart0
+
+	3)选择machine type;
+		linux/arch/arm/tools/mach-types
+		tiny4412        MACH_TINY4412       TINY4412        4608
+						
+						MACH_TYPE_TINY4412
+
+	4)初始化启动参数列表;
+		tag list		0x40000000 ~ 0x40004000		16K
+		
+		ATAG_CORE
+
+		ATAG_MEM		内存信息;		4G TTB
+
+		ATAG_CMDLINE	文件系统信息;	root=/dev/nfs 	init 
+
+		ATAG_NONE
+
+
+	5)启动内核;
+		ttb				0x40004000 ~ 0x40008000		16K
+
+		zImage			0x40008000 ~ ...			
+
+		r0 = 0
+		r1 = machine type number (4608)
+		r2 = physical address of tagged list (tag list)
+
+		disable irq/firq
+		svc mode
+
+		MMU CACHE disable
+		
+		jumping -> 0x40008000 (zImage)
+
+. Car
+	L298N
+	
+	NA		-> PWM12		-> PWM1			-> GPD0_0 
+	NB		-> PWM11		-> PWM0			-> GPD0_1
+	N1		-> GPIO10		-> XEINT15		-> GPX1_7		-> 1
+	N2		-> GPIO9		-> XEINT8		-> GPX1_0		-> 0
+	N3		-> GPIO8		-> I2CSCL5		-> GPB_3		-> 1
+	N4		-> GPIO7		-> I2CSDA5		-> GPB_2		-> 0
+	12V		-> GPIO7:5V
+	GND		-> GPIO7:GND
+
+. 遥控器
+	...
+
+. 超声波测距
+	...
+
+. 电机
+	速度	
+	前进	
+	后退	
+	左转	
+	右转	
+
+. 蜂鸣器
+	... 
+
+. 循迹模块
+	...
+
+. u-boot
+	make tiny4412_config
+		boards.cfg
+		tiny4412                     arm         armv7       tiny4412            samsung        exynos
+
+	配置:
+		config.mk			决定那些目录下的那些代码需要编译;
+			ARCH   = arm
+			CPU    = armv7
+			BOARD  = tiny4412
+			VENDOR = samsung
+			SOC    = exynos
+
+		include/config.h		
+			include/configs/tiny4412.h	决定那些文件中的那些部分需要;	#if	defined 	#ifdef
+
+
+	编译:
+		make
+
+
+
+
+
+

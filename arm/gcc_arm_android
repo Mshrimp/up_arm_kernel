@@ -1,0 +1,42 @@
+
+一、将ARM板系统烧成android系统
+
+
+
+
+二、将在PC机上交叉编译好的二进制文件发送到ARM板/cache目录
+
+PC:		#adb push ./main /cache
+			提示：171 KB/s (7799 bytes in 0.044s)		----发送成功
+
+ARM:	$cd /cache
+			提示：/system/bin/sh: cd: /cache: Permission denied		----需要root权限
+		$su		----切换到root权限操作
+		#cd /cache
+		#./main
+			提示：sh: ./main: No such file or directory		----库和动态链接加载器找不到
+PC:		adb push /usr/local/arm/4.5.1/arm-none-linux-gnueabi/lib/libc.so.6 /system/lib
+									----往ARM板上添加库文件
+			提示：/system 是只读权限，无法写入数据
+ARM:	#mount		----查看/system读写权限
+			/dev/block/mmcblk0p2 /system ext4 ro,relatime,data=ordered 0 0
+											   ^  ----只读权限	
+		#mount -o remount /dev/block/mmcblk0p2 /system		----重新挂载/system
+		#mount		----查看
+			/dev/block/mmcblk0p2 /system ext4 rw,relatime,data=ordered 0 0
+											   ^  ----读写权限
+PC:		adb push /usr/local/arm/4.5.1/arm-none-linux-gnueabi/lib/libc.so.6 /system/lib
+		adb push /usr/local/arm/4.5.1/arm-none-linux-gnueabi/lib/ld-linux.so.3 /system/lib
+									----将库文件从PC添加到ARM板上
+		# arm-linux-gcc -Wl,-dynamic-linker=/system/lib/ld-linux.so.3 main.c -o main
+									----在PC上指定执行时的动态链接加载器编译
+		# adb push main /cache		----将编译好的文件添加到ARM板上
+		
+ARM：	# ./main		----在ARM板/cache目录找到二进制可执行文件，并运行
+		hello world		----运行成功
+
+
+
+
+
+

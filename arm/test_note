@@ -1,0 +1,1517 @@
+
+help loady
+
+help md
+
+md 0x5000000查看地址
+
+Ctrl + A	S	传送文件
+
+loady	下载程序到开发板
+
+dnw		初始化USB设备，接收文件
+
+ARM:
+help dnw
+
+dnw 0x5000000
+
+PC:
+dnw-linux.tar.gz
+
+tar xf dnw-linux.tar.gz
+dnw		driver
+
+make
+make install
+
+182//.supports_autosuspend=0
+修改完保存再安装
+make && make install
+安装在电脑上
+
+ls /dev/
+
+dnw /root/abc
+
+ARM:
+校验和错误，不管
+dnw 0x5000000	查看下载的文件内容
+
+:%!xxd	查看二进制文件内容
+显示的高低字节反着
+
+help go
+
+go 0x5000000	运行程序
+
+printf 需要调用动态库，//libc.so.3 X --> write()
+不能运行
+
+dnw 0x5000000
+
+.	cd /FriendARM-A/Datasheet
+Exynos 4412 SCP .pdf
+访问内存
+
+arm -->  SOC  -->  控制器  -->DDR
+
+第一章：
+	SOC的所有控制器，控制哪些外设
+		64／128bit 内部bus
+
+第二章：
+	786pin引脚接法
+
+第三章：
+	Memory Map
+	统一编址：
+
+	独立编址：
+
+
+
+
+
+
+ARM：
+md 0x0			iROM
+查看ARM板内存
+md 0x200 0000
+md 0x202 0000	BL1内部RAM
+0x2021410开始是BL1
+
+0x400 0000 - 0x500 0000		16MB	SROM
+0x500 0000 - 0x600 0000		
+
+0x4000 0000 - 0xA000 0000	1.5G	DDR
+0x4000 0000 - 0x8000 0000	1G	DDR		数据空间
+0xA000 0000 - 0x0000 0000	1.5G	DDR
+
+
+独立编址：
+	INTEL:
+		EEPROM	->	1K
+
+
+arm-linux-ld main.o -o main
+
+vim start.s
+
+arm-linux-gcc -c start.s
+--> start.o
+
+arm-linux-objcopy -O binary start start.bin
+将二进制文件拷贝出来，没有包含部分
+
+
+裸板程序：
+	arm-linux-gcc -c start.s
+	arm-linux-ld start.o -o 
+	arm-linux-objcopy -O binary start start.bin
+
+	vim include/config/tiny4412.h
+311	//define CONFIG__
+
+	vim board/samsung/tiny4412/config.mk
+13 CONFIG_SYS_TEXT_BASE = 0x43e0 0000
+
+nm u-boot | grep printf
+查看地址
+
+uboot重新编译安装
+make && make install
+
+nm u-boot | grep printf
+关闭内存管理
+
+fdisk -l
+重新烧写SD卡的uboot
+
+
+uboot:
+md 0xc000 0000	卡死
+md 0x43e0 0000
+
+
+2016.07.05
+
+第四章：
+	Chip ID
+
+Sch -PCB
+Tiny4412
+
+all:
+	arm-linux-gcc -c 
+
+
+dnw 0x6000 0000
+PC:	dnw filename
+go 0x6000 0000
+
+ldr r0, =.LC0
+---->
+adr r0, .LC0
+
+
+setenv dw "dnw 0x6000000; go 0x60000000"
+
+run 
+help run
+run dnw
+
+movi 启动
+help movi
+
+ext2load
+fatload
+
+fatls mmc 0:0 /
+fatls mmc 0:1 /
+
+查看分区表
+
+
+
+mount 
+fdisk -p
+
+
+第五章：
+	Booting
+	启动顺序
+
+
+
+第六章：
+	GPIO
+
+768pin 中 304个多功能引脚
+164个内存引脚
+37个GPIO组
+	A0 A1	相同功能的pin组
+		usart0/1/2 or i2c
+
+
+252个多功能输入输出端口
+
+tiny4412-1412_20150910.pdf
+
+每组都有六个寄存器
+GPA0CON		GPA0组的配置寄存器		功能选择：GPIO
+GPA0DAT		GPA0组的数据寄存器		收发：GPIO
+GPA0PUD		上拉，下拉
+GPA0DRV		驱动强度
+
+
+LED:
+LED1 --> GPM4
+GPM4CON	GPM4CON[0] bit:3-0
+地址 0x1100 02E0
+[15:12]	0x1		输出
+[11:8]	0x1
+[7:4]	0x1
+[3:0]	0x1
+
+GPM4DAT		地址 0x1100 02E4
+[7:0]
+[3:0] 0b0000	0x0
+
+
+fdisk /dev/
+n
+1
+w
+
+fdisk -l
+partprobe保存
+mkfs	格式化
+./sd_fusing /dev/sdc
+setenv dw "dnw 0x5000 0000; go 0x5000 0000"
+saveenv
+
+run dw
+
+dnw start.bin
+
+
+
+
+
+run dw 
+## Starting application at 0x00000000 ...
+
+
+在uboot_tiny4412-master/u-boot.map中查找udelay,找到后，向上查找到lib/libgeneric.o文件
+在uboot_tiny4412-master/lib中grep "void udelay(" -Rn ./查找udelay函数，在time.c文件中找到udelay()函数的定义
+
+
+LED灯
+低电平触发
+LED1 --> GPM4_0		[3:0]
+LED2 --> GPM4_1
+LED3 --> GPM4_2
+LED4 --> GPM4_3
+
+GPM4CON		0x1100 02E0
+输出：
+[3:0]		0x1
+[7:4]		0x1
+[11:8]		0x1
+[15:12]		0x1
+GPM4DAT		0x1100 02E4
+[0:3]		LED1-LED4
+
+按键
+默认高电平，低电平触发
+Tiny4412/Super4412SDK 1506
+K1 --> GPX3_2	[11:8]
+K2 --> GPX3_3
+K3 --> GPX3_4
+K4 --> GPX3_5
+
+GPX3CON		0x1100 0C60
+输入：
+[11:8]		0x0
+[15:12]		0x0
+[19:16]		0x0
+[23:20]		0x0
+
+GPX3DAT		0x1100 0C64
+[2:5]		K1-K4
+			0:	按键按下
+			1:	按键抬起
+
+
+蜂鸣器
+高电平触发
+BP1 --> PWM0
+PWM0 --> XpwmTOUT0
+XpwmTOUT0 --> GPD0_0
+
+GPD0CON[3:0]	0x1140 00A0
+[3:0]	1
+输出：
+
+GPD0DAT[0]		0x1140 00A4
+[0]		1:	响
+		0:	不响
+
+
+
+ctags工具
+ctags -R
+vim
+:ta __udelay
+
+vim /etc/vimrc
+set tags+=/share/arm/uboot_tiny4412-master/tags
+
+ctrl+]	进入函数定义，类型定义
+ctrl+o	返回上一级
+
+
+裸板开发：
+1.	找到设备
+	LED1 LED2 LED3 LED4
+	KEY1 ...
+	BP1
+2.	原理图上设备连接
+
+
+3.	
+
+
+4.	在数据手册上查找怎么控制GPIO端口
+	多功能引脚
+	1)	配置功能
+
+	2)	输出／输入
+
+
+2016.07.06
+
+XnRESET	外部复位  低电平有效
+
+
+.equ	GPM4CON, 0x110002E0
+#define GPM4CON  0x110002E0
+使用#define 时候，需要将文件名改为*.S，编译的时候会进行预处理
+
+
+.s 和 .S
+.c --> gcc -E --> gcc -S --> gcc -c -->ld
+.s --> gcc -c --> ld
+.S --> gcc -E --> ld
+
+将所有头文件都放在include文件夹后
+arm-linux-gcc -c start.s -I ./include
+
+代码从43e00000开始往上走
+栈往下走
+
+用C语言开发的条件，栈已经被初始化
+地址初始化
+始终初始还
+
+BL0 --> stack初始化
+BL1 --> stack初始化
+
+vim arch/arm/cpu/armv7/start.S
+151行 找到初始化栈
+
+跨段指令
+ldr的伪指令
+
+.o文件未分配地址，所有地址都是在最后的链接时分配
+
+start.bin 是二进制代码，写到uboot的地址中运行，这个地址是物理地址
+
+
+与地址相关指令：
+	跨段访问的指令都是与地址相关的
+	ldr r0, =.LC0
+
+	绝对地址访问（与地址相关）
+	硬件地址等
+
+
+与地址无关指令：
+
+汇编中ldr访问是指针
+	mov add是数据
+
+
+
+链接地址：
+	ld --> 
+	ld -Ttext 
+
+
+C语言优化：
+	gcc -O3 *.c
+
+
+uboot_tiny4412-master/drivers/gpio
+vim s5p_gpio.c
+
+
+2016.07.07
+
+
+
+uboot 目录下有子文件夹，外层没有代码
+
+
+gcc main.c	-->	a.out
+gcc main.c -Wl,-Tabc.lds -Wl,-lc
+
+start.lds
+OUTPUT(b.out)	指定生成可执行文件名称
+
+OUTPUT_FORMAT("elf32-littlearm", "elf32-")  -->	指定默认参数
+
+
+.s	文件只能用@逐行进行注释
+.S	文件可以使用/* */进行块注释
+
+
+	__bss_start = .;
+	...
+	__bss_end = .;
+	清空bss段
+
+
+
+
+第56章
+ADC转换
+	模拟到数字转换
+	0-1.8V
+	或
+	0-3.3V
+
+	传感器
+	温度 --> 电压
+	湿度 --> 电压
+	亮度 --> 电压
+	物理信号 --> 模拟信号
+
+	可调电阻()
+
+	ADC
+	DAC
+	mp3 --> PCM解码 --> 解码数据音频信号 --> DAC --> 电压 --> 功率放大 --> 振动 --> 空气传播
+			16bit															物理特性
+
+ADC
+精度
+	10位 --> 0-1024
+	12位 --> 0-4096
+
+CMOS电平
+	0-1.8V	模拟信号输入范围
+
+采集速率
+	1MSPS  1M/s
+	5MHz	A/D转换器时钟
+
+	ADC_CFG		0x1001 0118
+	ADC_CFG[16]
+		0:	
+		1:
+
+时钟
+	APB bus
+	时钟源	PCLK(66MHz) / 预分频(降低频率到最高5MHz, 可小)
+		5MHz
+
+	ADCCON	ADC控制寄存器
+	ADCDAT	ADC转换数据寄存器
+	TSADCCON0	ARM11控制电阻触摸屏寄存器
+	TSSEL 
+
+	中断模式
+	轮询模式
+
+I/O
+	AIN[3:0]	输入
+	原理图管脚：
+	XadcAIN 0 - 3
+
+BASE	0x126C 0000
+	ADCCON	0x0000	ADC控制寄存器
+	ADCDLY	转换延迟－电阻触摸屏
+	ADCDAT	0x000C	ADC数据寄存器
+	CLRINTADC	//0x0018
+	ADCMUX	0x001C	 ADC通道选择寄存器，同一时间只能选一个通道
+
+	ADCCON
+	[16]	10bit/12bit精度选择
+	[15]	转换结束标志位
+	[14]	预分频使能位
+	[13:6]	分频值	PCLK / (?+1) <= 5MHz
+					PCLK = 100MHz
+		[14]=1时，设置，否则不设置
+	[2]		电阻触摸屏使用
+	[1]		读数据时开始数据转换
+	[0]		手动开始数据转换	=1 开始
+
+
+	ADCDAT
+	[11:0]	10bit/12bit
+	ADCMUX
+	[3:0]	通道选择，一次只能选一个
+
+	工作模式：
+		轮询
+		中断
+
+中断入口：
+	0x18
+	0xFFFF0018
+
+	md 0xc080
+	0xe51ff004
+	1110 0101 0001 1111 1111 0000 0000 0100
+	ldr pc, [pc, #-4]
+		跳转到
+		0x2021428	(IRAM)	 普通中断的处理代码	(IROM)
+	md 0x0
+	0xea00301b
+		0x202142c	(IRAM)	快速中断的处理代码	(IROM)
+
+
+2016.07.08
+
+
+uboot:
+	md 0x0	查看内存地址
+
+. MMU内存管理单元：
+	1)	虚拟地址和物理地址映射
+	2)	地址的权限访问
+
+	普通中断入口：	0x18	0xffff0018
+	快速中断入口：	0x1c	
+
+
+MPU
+
+
+链接脚本
+
+
+4G内存
+
+与地址相关指令：
+	ldr	r0, =label
+虚拟地址：
+	多任务物理地址不够用时
+
+使用MMU后CPU送出来的地址一定是虚拟地址
+总线上的地址一定是物理地址
+CPU访问的地址是物理地址还是虚拟地址，要看MMU有没有使能，MMU打开－－虚拟地址，没有打开－－物理地址
+只要打开MMU，CPU访问的地址一定是虚拟地址
+
+寄存器没有地址
+
+可以通过MMU访问控制器，控制器地址也被转换成虚拟地址后访问
+
+虚拟地址：
+	0xFFFF 0000
+	多任务
+
+MPU：内存保护单元
+
+协处理器：
+	扩展ARM处理功能，协助ARM处理器工作
+
+处理器工作模式：
+	usr		FIRQ		IRQ			SVC			MON			ABT		HYP		UND		SYS	
+普通用户	快速中断	普通中断	管理员		检测模式	异常	虚拟化	未定义	系统
+												(安全扩展)			(虚拟化扩展)
+									u-boot
+									kernel
+	10000	10001		10010		10011		10110		10111	11010	11011	11111
+
+
+在uboot下运行程序，为管理员模式
+在最小网络文件系统上运行程序，为普通用户模式
+msr r0, cpsr
+mov pc, lr
+
+
+模式切换：
+	异常发生
+	usr - 异常	->	特权模式
+
+	特权模式	->	cpsr	->	user
+
+	要进入用户和系统模式，必须修改cpsr
+	当异常导致模式改变时，内核：
+		1	cpsr	->	spsr
+		2	pc		->	lr
+		3	设置cpsr为相应异常模式
+		4	设置PC为相应异常处理程序的入口地址
+
+
+
+异常：					0x0		0xFFFF 0000
+	Reset				0x0		0xFFFF 0000
+		复位异常
+		reset
+		sdt
+		sw
+	Undefined Instruction	0x4	0xFFFF 0004
+		未定义异常	
+	Supervisor	Call	0x8		0xFFFF 0008
+		系统调用
+		唯一从user 主动进入内核的方法
+	Prefetch Abort		0xC		0xFFFF 000C
+		预取指令异常
+		MMU
+	Data Abort			0x10	0xFFFF 0010
+		预取数据异常
+		MMU
+	IRQ Interrupt		0x18	0xFFFF 0018
+		普通中断
+	FIQ Interrupt		0x1C	0xFFFF 001C
+		快速中断
+
+异常向量表：
+	发生异常后跳转到异常向量表
+协处理器：
+	SCTLR寄存器
+		[13]	V位		异常向量表基地址
+	V = 0	0x0
+	V = 1	0xFFFF 0000
+	V=0		V=1
+	0x0		0xFFFF 0000
+	0x4		0xFFFF 0004
+	0x8		0xFFFF 0008
+	0xC		0xFFFF 000C
+	0x10	0xFFFF 0010
+
+		[0]		M位		MMU使能位
+
+
+	mrc p15, 0, rt, c1, c0, 0
+		SCTLR -->	rt	读取SCTLR到rt
+	mcr p15, 0, rt, c1, c0, 0
+		rt	--> SCTLR	把rt写入到SCTLR
+
+	MIDR	主ID寄存器
+		mrc p?, opt1, rt, c?, opt2
+				^...			^	四个组合代表一个寄存器
+		读取
+		
+		p15  <-->	CP15	系统控制协处理器寄存器
+		mrc p15, 0, rt, c0, c0, 0
+			读main id
+		
+
+
+ldr
+	只能在当前PC的4KB范围内跳转	
+		指令译码后，偏移表达式占用指令代码32位的最后12位，即：2^12=4KB
+	ldr Rn, label	相对寻址 基址是程序计数器PC，偏移量是语句标号到PC处的指令条数
+	
+
+b命令只能在当前PC的32MB范围内跳转
+
+
+	当中断发生时，处理器挂起正常执行的程序，并开始加载中断向量表，处理器设置PC到中断向量表（是一个特殊的地址），每一个向量表入口包含一条指向一个特定子程序的跳转指令，是中断、异常的分支入口
+	复位向量是处理器执行的第一条指令，跳转到初始化代码
+
+
+
+cpsr	spsr	寄存器
+	mrs	写数据到寄存器
+	msr 从寄存器中读数据
+
+
+
+TTBR0	映射表基址寄存器	格式，32位
+	[31:x]	
+	[31:14]		TTB0
+	x = (14-TTBCR.N)
+
+	mrc p15, 0, rt, c2, r0, 0
+	mcr p15, 0, rt, c2, r0, 0
+
+TTBCR	映射表控制寄存器	默认为0
+	.N	映射表
+	mrc p15, 0, rt, c2, c0, 2	读取
+
+地址映射：
+	按字节映射
+
+	按段进行映射，每个段1M内存，只需要映射每段的首地址，需要4K个映射关系，每个关系8个字节，共需要32K
+	虚拟地址使用下标，物理地址使用地址共4字节，每个映射关系需要4个字节，共需要16K
+	14位为0,对应16K对齐地址
+
+	按M映射，高12为地址，低20位做其他功能使用
+	[1:0]	= 10	-->	段映射
+	[18]	0	-->	1M
+			1	--> 16M
+	[8:5]	域	权限操作
+		共16个域的权限操作
+	[3]	C	cache缓存
+	[2]	B	buffer缓存
+
+DACR	16个域寄存器
+	[(2n+1:2n)]
+		0b00	不允许访问
+		0b01	客户身份访问，要检测映射表中权限位，有权限访问
+		0b10	保留
+		0b11	管理员权限访问，不检测映射表中权限
+
+	mrc p15, 0, rt, c3, c0, 0	读
+	mcr	p15, 0, rt, c3, c0, 0	写
+
+段映射	虚拟地址和物理地址后5位数据一样
+
+
+
+二级页表映射：
+
+按1M进行段映射，有些程序比较小，容易造成空间浪费
+	段大小		映射表大小
+	1K	-->		4M
+	
+按1M进行段映射，再在1M上按4K进行段映射，有256个段，映射表占1K空间
+	
+	[31:10]		二级页表地址
+	[9:0]		其他用途
+
+	小页映射：
+		4K		[1:0]	0b10
+	大页映射
+		64K		[1:0]	0b01		共16个表项		都是按照256个计算
+
+	
+
+虚拟地址：	0xFFFF 0000
+
+
+
+
+片选信号：	低电平有效，选中要使用的芯片开始工作
+地址总线：	16位地址总线，
+
+
+TLB	缓存：提高查表效率
+	ITLB		指令
+	DTLB		数据
+	存储的是虚拟地址和物理地址的映射关系
+
+	切换进程后，映射关系发生变化，需要清空一个映射关系后，切换才会成功
+
+Cache 缓存
+	提高内存访问效率
+	ICache	指令缓存
+	DCache	数据缓存
+	存放的是地址和数据的映射关系
+
+
+			Core
+			 |
+			MMU
+		   || ||
+	ITLB<---| |--->DTLB		取表
+			| |	
+	ICache<-- -->DCache		取地址
+
+IO操作时候Cache是关闭的
+
+TLB	可以被清楚，但是不能关闭
+Cache 可以开关
+
+打开
+段有两个映射位 C  B
+
+	SCTLR.
+		D
+		I
+		mrc p15, 0, r0, c1, c0, 0
+		orr r0, r0, #(1<<2)
+		orr r0, r0, #(1<<12)
+		mcr p15, 0, r0, c1, c0, 0
+	
+
+	TTB
+		C	Cache
+		B	Buffer
+
+
+
+静态库
+/usr/local/arm/4.5.1/arm-none-linux-gnueabi/sys-root/usr/lib/libc.a
+
+SVC	
+asm("swi #5");		C语言内嵌汇编
+svc 或者 swi 一样
+
+
+
+
+WDT
+
+	PCLK	100MHz
+
+	WTCON[15:8]		8位分频，最大256	-->		249 + 1
+		1/16	1/32	1/64	1/128
+		1/128	-->		3125Hz
+	WTCON[5]	看门狗使能
+		1	使能
+		0	不使能
+
+	WTCON[0]	复位使能
+		1	使能
+		0	不使能
+
+	WTCON	0x10060000
+	WTCNT	0x10060008
+
+	WTCNT	[15:0]
+		65535	最大支持65535
+	WTCON	[15:8] [5] [4:3] [0]	(249<<8) | (1<<5) | (3<<3) | (1<<0)
+		[15:8]	249		100MHz/(249+1)
+		[5]		1		enable
+		[4:3]			100MHz/(249+1)/128
+		[0]		1		enable
+		
+		设置分频为249+1
+			f = 100MHz / (249 + 1) / 128
+
+看门狗默认不打开，在电源管理中被忽略
+	0x1002040C
+	0x10020408
+	MASK_WDT_RESET_REQUEST
+	SYS_
+
+reset:
+	硬件复位	按下底板上的复位按钮，系统复位
+
+
+irq		异常
+	key
+	wdt
+	adc
+	...
+
+	
+
+	cpsr寄存器中
+		I	= 1	禁止IRQ
+		F	= 1	禁止FIQ	
+			I F		默认都是1
+		T	Thumb指令集
+		B			默认1
+	
+
+IRQ中断发生时：
+	
+	跳转到0xFFFF0018或者0x00000018
+
+
+GIC	中断控制器
+	8位	256个	低电平有效
+	多个中断同时到来，才需要判断优先级
+	每次中断完成后，要先告诉中断源头清中断，再告诉GIC中断已处理
+	
+	寄存器：
+		状态寄存器
+
+	IRQ中断默认不会嵌套，默认不会被打断
+
+	优先级级别：
+		0	--	255
+		高		低
+
+
+	中断三大类：
+		SGI		软件中断16个 直接操作GIC进行中断		SWI属于异常，不一样
+		PPI		私有外部中断	8个		给单核
+		SPI		共享外部中断	128个	可以给任意一个或多个核
+
+	中断状态：
+		闲置
+		未决	等待
+		活跃	被响应，正在处理未完成
+		正在处理未被处理	同一个中断多次过来
+
+	中断触发方式：
+		边缘触发	默认出发方式
+		电平触发
+
+	GIC Interrupt Table
+		中断号共160个
+		ID号	几号中断
+		32-159	外部中断
+		26、28	PPI
+
+		
+	ICC:	0x1048 0000
+		ICCICR_CPUn	
+			[0]		Enable
+
+		ICCPMR_CPUn		0	0x1048 0004
+			[7:0]	中断优先级屏蔽，高于数据有效
+
+		ICCIAR_CPUn
+			[12:10]	CPU ID号	针对SGI，
+			[9:0]	中断ID号	IRQ(0-159)
+
+		ICCEOIR_CPUn
+			[12:10]	清	CPUID
+			[9:0]	清	IRQID
+
+		ICCRPR_CPUn
+			
+		ICCHPIR_		
+			[9:0]	未决中断，下一个中断的ID
+
+	
+
+	ICD:	0x1049 0000
+
+		ICDDCR	0x0
+			[0]		
+				0	GIC忽略所有外部中断
+		
+
+			[4:0]	GIC支持最大中断个数  32*(N+1)
+
+
+
+内嵌函数，不能用volatile防止优化
+	
+		
+		
+PWM:
+	五个定时器	0-4
+	18个寄存器
+
+	f = 100MHz/(249+1)/4 = 100KHz
+	T = 1/f = 1000 000 000ns/100000Hz = 10000ns = 10us
+
+	TCFG0	0x139D 0000		配置预分频
+		[7:0]	Prescaler0		timer0	timer1
+		[15:8]	Prescaler1		timer2	timer3	timer4
+			prescaler value		-->		0 ~ 255
+		[23:16]	Dead zone length		0 ~ 254
+			实际值	+ 1
+
+	TCFG1	0x139D 0004		配置固定分频
+		[19:16]	Divide Mux4 -->	timer4	
+		...
+		[7:4]	Divide Mux1	-->	timer1
+		[3:0]	Divide Mux0	-->	timer0
+			固定分频	1/1		1/2		1/4		1/8		1/16
+			
+	TCON0	0x139D 0008
+		Timer0
+		[0]		Timer 0 start/stop	
+			1		Start timer 0
+			0		Stop timer 0
+		[1]		Timer0 manual update	手动装载
+			1		
+		[2]		TOUT_0 inverter on		翻转使能
+			1		on
+			0		off
+		[3]		Timer0 auto reload on/off	自动装载开关
+			1		auto reload
+			0		one shot
+		[4]		Dead zone generator Enable/Disable	死区发生器使能
+			1		Enable
+			0		Disable
+		Timer4
+		[22]	auto-reload
+		[21]	update
+		[20]	start/stop
+
+
+	TCMPn
+
+	TCNTn
+
+	TCNTB0	0x139D 000C		Timer0 count buffer register	计数装载寄存器
+		[31:0]
+	
+	TCMPB0	0x139D 0010		Timer0 compare buffer register	比较寄存器
+		[31:0]
+		必须比TCNTBn小
+
+	TCNTO0	0x139D 0014		读内部寄存器TCNTn的值
+		只读寄存器
+
+	TINT_CSTAT	0x139D 0044		定时器中断
+		[4:0]		Timer4 ~ Timer0 interrupt enable	中断使能
+			1
+			0
+		[9:5]		Timer4 ~ Timer0 interrupt status	清中断
+			1		写1清中断
+			
+
+
+
+串口：
+	115200bps
+	115200b = 14400byte ~= KHz
+
+uboot的udelay使用的是timer4
+
+	
+	PWM0	-->		GPD0_0
+	PWM1	-->		GPD0_1
+	PWM2	-->		GPD0_2
+	PWM3	-->		GPD0_3
+
+	GPD0CON		0x2		TOUT_0
+
+
+
+外部中断：
+KEY中断：
+	K0			~		K3
+	XEINT26		~		XEINT29		-->		IRQID = 64
+	GPX3_2		~		GPX3_5
+	
+	GPIO配置：
+		GPX3_2	~	GPX3_5
+		GPX3CON		0x1100 0C60
+			GPX3CON[2]	[11:8]		0xF	(WAKEUP_INT3[2])
+			GPX3CON[3]	[15:12]		0xF	(WAKEUP_INT3[3])
+			GPX3CON[4]	[19:16]		0xF	(WAKEUP_INT3[4])
+			GPX3CON[5]	[23:20]		0xF	(WAKEUP_INT3[5])
+
+		GPX3CON	-->		EXT_INT43CON
+						EXT_INT43_MASK
+						EXT_INT43_PEND
+
+		EXT_INT43CON	0x1100 0E0C
+			EXT_INT43CON[2]		[10:8]	
+			EXT_INT43CON[3]		[14:12]	
+			EXT_INT43CON[4]		[18:16]	
+			EXT_INT43CON[5]		[22:20]
+				触发方式：
+				0x0	-->	Low level		低电平触发
+				0x1 -->	High level		高电平触发
+				0x2	-->	Triggers Falling edge	下降沿触发
+				0x3	-->	Triggers Rising edge	上升沿触发
+				0x4	-->	Triggers Both edge		双边沿触发
+		
+		EXT_INT43MASK	0x1100 0F0C		使能外部中断
+			EXT_INT43MASK[2]	[2]
+			EXT_INT43MASK[3]	[3]
+			EXT_INT43MASK[4]	[4]
+			EXT_INT43MASK[5]	[5]
+				0	Enable Interrupt
+				1	Masked
+
+		EXT_INT43PEND	0x1100 0F4C		判断中断是否发生，并检测哪个中断发生
+			EXT_INT43PEND[2]	[2]
+			EXT_INT43PEND[3]	[3]
+			EXT_INT43PEND[4]	[4]
+			EXT_INT43PEND[5]	[5]
+				1	Interrupt Occurs
+				0	Not	Occurs
+			读:		1	有中断
+					0	无中断
+			写		1	清中断
+
+	CPSR配置
+		I	-->		IRQ
+		F	-->		FRQ
+
+	CPU配置
+		ICCICR_CPU0	
+			
+		ICCPMR_CPU0
+
+	中断控制配置	IRQID = 64
+		ICDDCR
+		ICDISER_CPU
+			IRQID / 32
+			IRQID % 32
+
+		ICDIPR_CPU
+			IRQID / 4
+			IRQID % 4
+
+		ICDIPTR_CPU
+			[7:0]	-->		0b0000 0000
+
+		ICDSGIR		软中断使用
+
+
+
+ADC中断
+	中断控制器：
+		IRQID	->	42
+
+		42 / 32 = 1
+		42 % 32 = 10
+		ICDISER1_CPU0, 10
+		
+		42 / 4 = 10
+		42 % 4 = 2
+		ICDIPR10_CPU0, 16, 8, 80 
+		ICDIPTR10_CPU0, 16, 8, 1
+
+	中断组合器：
+		ISER2
+			[19]	adc irq enable
+		IECR2
+		ISTR2
+		IMSR2	
+			[19]	1	读取到1，有中断	
+
+	清中断：
+		CLRINTADC	0x126C 0018
+	
+
+RTC:
+	IRQID	76	77
+
+	XRTCCLKO	可以给外部提供始终
+
+	RTCCON
+	TICCNT		递减数
+	RTCALM
+		
+	ALM...		定时时间
+
+	BCD...		当前时间
+	
+	CURTICCNT
+
+		CTLEN	1	Enables RTC control
+
+	2^15	= 32768
+
+
+	闹钟：	IRQID = 76
+		RTALM	|=	1
+		ALMSEC	=	BCDSEC + 30
+
+
+
+超声波测距模块：
+HCSR:
+	GP10_DS9		XEINT8		GPX1_0		TRIG
+	GP10_DS10		XEINT15		GPX1_7		ECHO
+
+	超声波模块工作流程：
+		TRIG	发送高电平开始		1	-->		10us	-->		0
+		ECHO	接收				0	-->		1		-->		0
+
+	GPX1CON			0x1100 0C20
+		GPX1CON[0]	[3:0]		0x1		Output
+		GPX1CON[7]	[31:28]		0x0		Input
+
+	GPX1DAT			0x1100 0C24
+		GPX1DAT[0]	[0]		Output	1	-->	10us	-->	0
+		GPX1DAT[7]			Input
+
+    EXT_INT41CON[7]		0x1100 0E04
+		[30:28]		0x4		Triggers Both Edge
+
+	EXT_INT41_MASK[7]	0x1100 0F04
+		[7]		0x0		Enable Interrupt
+
+	EXT_INT41_PEND[7]	0x1100 0F44
+		[7]		Readonly
+			0		Not occur
+			1		Interrupt Occurs
+	
+
+
+
+
+
+红外遥控：
+IR
+	下降沿中断
+	9ms + 4.5ms
+	每次 + 0.84ms
+	pwm  -->  0.84ms
+	
+
+CMU		时钟管理单元
+	PLL	锁相环： 倍频（24MHz）
+
+
+	CMU_CPU		CPU	1400MHz
+
+	100MHz	外设寄存器
+
+
+	CPU工作频率1.4G	总线266M和133M
+	DRAM内存工作频率400M	总线200M
+
+	多媒体音频	192/96M
+	PERIL	-->		PCLK    -->	100MHz
+
+
+
+
+UART
+	SCLK_UART0~4	DIV-UART0~4		MOUT-UART0~4	SCLK-MPLL_USER_T	(CMP_TOP)MUX-MPLL_CTRL_USER_T	SCLK-MPLL	(CMU_DMC)MOUT-MPLL	MUX-MPLL	FIN-PLL		24MHz
+	MPLL_CON0	0x1004 0108		读出M P S位的值，通过公式计算时钟
+		FOUT = MDIV * FIN / (PDIV * 2 ^ SDIV)
+		PDIV	1 ~ 63
+		MDIV	64 ~ 1023
+		SDIV	0 ~ 5
+
+		M = 100
+		P = 3
+		S = 0
+		FOUT = 100 * 24 / (3 * 2 ^ 0) = 800MHz
+
+	
+	CLK_DIV_PERIL0		0x1003 C550		读出USRT0~4分频值
+		77777		DIVUART0~4
+
+	CLK_SRC_PERIL0		0x1003 C250	
+		66666		SCLKMPLL_USER_T
+
+
+
+校验：
+	crc:
+		
+	ecc:
+		nand flash
+			八组数据，横竖奇偶校验，定位到出错的横竖坐标
+		优点：
+			可以定位到出错的横竖坐标
+		缺点：
+			只能校验一位出错，并定位，但是不能校验两位错误
+	奇校验：
+		数据中有奇数个1，校验位是1，否则为0
+	偶校验：
+		数据中有偶数个1，校验位是1，否则为0
+
+	
+
+		[1:0]	数据位长度
+			00		5 bits
+			01		6 bits
+			10		7 bits
+			11		8 bits
+
+
+
+	XuRXD0		GPA0_0
+
+	XuTXD0		GPA0_1
+
+init:
+	GPA0CON
+	GPA0
+
+		SCLK_UART0 / 16 /(DIV_VAL + 1) = 115200
+		DIV_VAL = SCLK_UART0 / (115200 * 16) - 1
+				= 53.3
+	UBRDIVn		0x0028
+		115200
+		
+	UFRACVALn
+
+	ULCONn
+
+	UCONn
+
+send:
+	UTRSTAT0	
+		[2]
+	UTXH0
+		ch
+	
+recv:
+	UTRSTATn
+		[0]
+	URXH0
+		ch
+
+驱动：实现的是机制
+
+应用：使用的是策略
+
+\n	换行
+\r	回车
+
+	串口输入的Enter是回车'\r'，不是换行'\n'
+
+	
+CPU
+
+仲裁器
+
+
+WDT		1)复位；喂狗
+		2)定时器中断
+			65535(16bit)
+	
+PWM
+		1)	定时器中断
+				32bit
+		2)	脉冲宽度调制
+
+	PWM		脉冲宽度调制定时器
+		timer0 1 2 3 4
+
+
+LCD
+	1555	666		
+		D[15]		公用
+		D[14:10]	Red
+		D[9:5]		Green
+		D[4:0]		Blue
+	
+	565
+		D[15:11]	Red
+		D[10:5]		Green
+		D[4:0]		Blue
+
+8 BPP Display:
+	A232
+		BYSWP = 0	P1 - P8
+		BYSWP = 1	P8 - P1
+		BYSWP	字节交换位
+	
+	Palette		彩色表
+
+4 BPP Display:
+	Palette:
+		
+32 BPP(8 8 8 8)
+25 BPP(A 8 8 8)
+
+
+LCDBASEU	内存地址起始
+LCDBASEL	内存地址结束
+PAGEWIDTH	显示屏宽
+OFFSET		偏移(跳过)
+
+HSYNC	行计数
+VDEN	有效位，高电平有效
+LINEVAL+1	像素行
+HSPW+1		
+HOZVAL+1	像素列
+
+VD[23:0]	24位数据
+
+Frame Rate = 1/ [{}]
+
+Exynos4412	p1816
+VSPW --> tvpw
+
+LCD_HSYNC
+LCD_VSYNC
+LCD_VCLK
+LCD_VDEN
+LCD_VD[]
+
+
+底板上一共24根数据线	RGB --> 8 8 8
+
+1.GPIO功能配置
+
+RGB Interface Signals of Display Controller
+	GPF0CON		= 0x22222222
+		[0]		LCD_HSYNC
+		[1]		LCD_VSYNC
+		[3]		LCD_VCLK
+		[2]		LCD_VDEN
+		[7:4]
+	GPF1CON		= 0x22222222
+		[7:0]
+	GPF2CON		= 0x22222222
+		[7:0]
+	GPF3CON		= 0x2222
+		[3:0]
+			LCD_VD[0:23]
+
+	
+
+LCD	I2C
+
+	LCD							
+	i2cSCL1_OUT		i2cSCL1		Xi2c1SCL/GPD1_3
+	i2cSDA1_OUT		i2cSDA1		Xi2c1SDA/GPD1_2
+	XEINT14_OUT		XEINT14		GPX1_6
+
+GPIO配置
+	GPD1CON		0x1140 00C0
+		GPD1_2
+			GPD1CON[2]	[11:8]		0x2		I2C_1_SDA
+		GPD1_3
+			GPD1CON[3]	[15:12]		0x2		I2C_1_SCL
+		set_nbit(GPD1CON, 8, 8, 0x22);
+
+	GPX1CON		0x1100 0C20
+		GPX1_6	
+			GPX1CON[6]	[27:24]		0xF		Interrupt
+
+Interrupt配置
+	EXT_INT41CON		0x1100 0E04
+		EXT_INT41CON[6]		[26:24]		0x2		Triggers falling edge
+	
+	EXT_INT41_MASK		0x1100 0F04
+		EXT_INT41_MASK[6]	[6]		0x0		Enable Interrupt
+
+	EXT_INT41_PEND		0x1100 0F44
+		EXT_INT41_PEND[6]	[6]		Read only
+
+I2C配置
+	Base Address
+		Base Address0		0x1386 0000
+		Base Address1		0x1387 0000
+		...
+		Base Address7		0x138D 0000
+
+	I2CCONn = Base Address(n) + 0x0000
+	
+	I2C1:
+		I2CCON1		0x1387 0000
+			[7]		I2C-bus acknowledge enable bit
+				0		Disables
+				1		Enables
+			[6]		Tx clock prescaler selection bit
+				0		I2CCLK = fPCLK / 16
+				1		I2CCLK = fPCLK / 512
+			[5]		I2C-bus Tx/Rx interrupt enable/disable bit
+				0		Disables
+				1		Enables
+			[4]		I2C-bus Tx/Rx interrupt pending flag
+				...
+			[3:0]	I2C-bus transmit clock prescaler
+				Tx clock = I2CCLK / (I2CCON[3:0] + 1)
+	
+	I2CSTATn = Base Address(n) + 0x0004
+		I2CSTAT1	0x1387 0004
+			[7:6]	I2C-bus Master/Slave Tx/Rx mode select bits
+				00		Slave receive mode
+				01		Slave transmit mode
+				10		Master receive mode
+				11		Master transmit mode
+			[5]		I2C-bus busy signal status bit
+				(Read)	0	Not busy
+						1	Busy
+				(Write)	0	STOP signal generation
+						1	START signal generation
+			[4]		I2C-bus data output enable/disable bit
+						0	Disables Rx/Tx
+						1	Enables Rx/Tx
+
+
+	1.	If required, Write own Slave address on I2CADD register
+
+	2.	Set I2CCON register:
+		a)	Enable interrupt
+		b)	Define SCL period
+	
+	3.	Set I2CSTAT to enable Serial Output
+
+	One master to multi slave:
+		[S][SLAVE_ADDR][R/W][A] [DATA][A] [DATA][A] ... [DATA][A] [P]
+						W:0
+						R:1
+write:
+		................W
+		[S][SLAVE_ADDR][W][A] [DATA_ADDR][A] [DATA][A] ... [DATA][A] [P]
+read:
+		................R		
+		从定地址开始读
+		[S][SLAVE_ADDR][W][A] [DATA_ADDR][A] [P]
+		[S][SLAVE_ADDR][R][A] [DATA_ADDR][A] [DATA][A] [DATA][A] ... [DATA][A] [P]
+
+Mread:	从0地址开始读
+		[S][SLAVE_ADDR][R][A] [DATA_ADDR][A] [DATA][A] [DATA][A] ... [DATA][A] [P]
+		
+	Master/Transmitter Mode
+
+	Master/Receiver Mode
+
+
+EEPROM
+	
+
+
+bootm
+	bootloader
+	1)初始化内存，串口
+	2)movi read kernel 0 0x40008000
+	3)bootm 0x40008000	启动内核
+	4)bootargs			给内核传递参数
+
+	Booting:
+	1)初始化内存
+		BL0 BL1
+	2)初始化串口
+		uart0
+		kernel-parameters.txt
+	3)选择machine type
+		linux/arch/arm/tools/mach-types
+		tiny4412	MACH_TINY4412	TINY4412	4608
+	4)初始化启动参数列表
+		tag list	0x40000000 ~ 0x40004000
+
+	5)启动内核
+		ttb			0x40004000 ~ 0x40008000
+		zImage		0x40008000 ~ ...
+
+		r0 = 0
+		r1 = machine type number
+		r2 = 
+
+	A/Linux/linux-3.5/Documentation
+
+	boot loader
+	1. Setup and initialise the RAM
+
