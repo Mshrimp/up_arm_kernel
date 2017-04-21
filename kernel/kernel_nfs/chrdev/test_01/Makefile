@@ -1,7 +1,6 @@
 
 obj-m		+= test.o
 
-#KERNEL_DIR := /share/arm/FriendlyARM-4412-201506/FriendlyARM-4412-DVD-A/Linux/linux-3.5
 KERNEL_DIR := /home/mcy/kernel/linux-3.5
 ROOTFS	:= /nfsroot
 
